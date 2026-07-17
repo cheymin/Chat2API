@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  chat2api:
+    image: ghcr.io/xiaoy233/chat2api:latest
+    container_name: chat2api
+    ports:
+      - "8787:8787"
+    volumes:
+      - chat2api-data:/root/.chat2api
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8787/v1/models', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  chat2api-data:
+    driver: local

@@ -1,0 +1,61 @@
+# Dependencies
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+out
+dist
+release
+
+# Development files
+.git
+.github
+.gitignore
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Testing
+tests
+coverage
+.nyc_output
+
+# Documentation
+docs
+*.md
+!README.md
+!README_CN.md
+
+# Electron specific
+*.blockmap
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+logs
+*.log
+
+# Temporary files
+tmp
+temp
+.cache
+
+# Source artifacts (optional, uncomment if you want to exclude them)
+# *.wasm
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Build resources (not needed in build context)
+build/icons
