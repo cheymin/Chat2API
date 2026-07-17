@@ -8,10 +8,10 @@
 
 ```bash
 # 从 GitHub Packages 拉取最新版本
-docker pull ghcr.io/xiaoy233/chat2api:latest
+docker pull ghcr.io/cheymin/chat2api:latest
 
 # 拉取特定版本
-docker pull ghcr.io/xiaoy233/chat2api:1.4.0
+docker pull ghcr.io/cheymin/chat2api:1.4.0
 ```
 
 ### 运行容器
@@ -20,42 +20,20 @@ docker pull ghcr.io/xiaoy233/chat2api:1.4.0
 # 基本运行
 docker run -d \
   --name chat2api \
-  -p 8787:8787 \
-  ghcr.io/xiaoy233/chat2api:latest
+  -p 8080:8080 \
+  ghcr.io/cheymin/chat2api:latest
 
 # 带持久化存储
 docker run -d \
   --name chat2api \
-  -p 8787:8787 \
+  -p 8080:8080 \
   -v chat2api-data:/root/.chat2api \
-  ghcr.io/xiaoy233/chat2api:latest
+  ghcr.io/cheymin/chat2api:latest
 ```
 
 ### 使用 Docker Compose
 
-创建 `docker-compose.yml` 文件:
-
-```yaml
-version: '3.8'
-
-services:
-  chat2api:
-    image: ghcr.io/xiaoy233/chat2api:latest
-    container_name: chat2api
-    ports:
-      - "8787:8787"
-    volumes:
-      - chat2api-data:/root/.chat2api
-    restart: unless-stopped
-    environment:
-      - NODE_ENV=production
-
-volumes:
-  chat2api-data:
-    driver: local
-```
-
-启动服务:
+项目已提供 `docker-compose.yml` 文件,直接启动:
 
 ```bash
 docker-compose up -d
@@ -78,7 +56,7 @@ docker buildx build --platform linux/amd64,linux/arm64 -t chat2api:local .
 ```bash
 docker run -d \
   --name chat2api \
-  -p 8787:8787 \
+  -p 8080:8080 \
   chat2api:local
 ```
 
@@ -104,15 +82,15 @@ docker run -d \
 ```bash
 docker run -d \
   -v /path/to/chat2api:/root/.chat2api \
-  -p 8787:8787 \
-  ghcr.io/xiaoy233/chat2api:latest
+  -p 8080:8080 \
+  ghcr.io/cheymin/chat2api:latest
 ```
 
 ### 端口映射
 
 | 端口 | 说明 |
 |------|------|
-| `8787` | API 代理服务端口 |
+| `8080` | API 代理服务端口 |
 
 ## 访问服务
 
@@ -120,10 +98,10 @@ docker run -d \
 
 ```bash
 # 测试连接
-curl http://localhost:8787/v1/models
+curl http://localhost:8080/v1/models
 
 # 使用 API
-curl http://localhost:8787/v1/chat/completions \
+curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "deepseek-chat",
@@ -160,7 +138,7 @@ curl http://localhost:8787/v1/chat/completions \
 
 3. **验证镜像**:
    ```bash
-   docker pull ghcr.io/xiaoy233/chat2api:v1.4.0
+   docker pull ghcr.io/cheymin/chat2api:v1.4.0
    ```
 
 ## 技术细节
@@ -212,6 +190,6 @@ docker inspect chat2api --format='{{json .Mounts}}'
 
 ## 相关链接
 
-- [GitHub Packages](https://github.com/xiaoY233/Chat2API/pkgs/container/chat2api)
+- [GitHub Packages](https://github.com/cheymin/Chat2API/pkgs/container/chat2api)
 - [Docker Hub](https://hub.docker.com/) (如需推送到 Docker Hub)
-- [项目主页](https://github.com/xiaoY233/Chat2API)
+- [项目主页](https://github.com/cheymin/Chat2API)

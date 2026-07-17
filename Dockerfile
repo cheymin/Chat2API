@@ -73,12 +73,12 @@ sleep 1\n\
 node ./out/main/index.js --no-sandbox\n\
 ' > /app/start.sh && chmod +x /app/start.sh
 
-# Expose proxy port (default: 8787)
-EXPOSE 8787
+# Expose proxy port (default: 8080)
+EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:8787/v1/models', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+    CMD node -e "require('http').get('http://localhost:8080/v1/models', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 # Labels for GitHub Packages
 LABEL org.opencontainers.image.title="Chat2API Manager"
