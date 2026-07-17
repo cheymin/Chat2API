@@ -65,6 +65,8 @@ RUN mkdir -p /root/.chat2api
 # Set environment variables
 ENV NODE_ENV=production
 ENV DISPLAY=:99
+ENV DOCKER=true
+ENV DISABLE_AUTO_UPDATER=true
 
 # Create startup script for Docker headless mode
 RUN echo '#!/bin/bash\n\

@@ -45,31 +45,27 @@ export class UpdaterManager extends EventEmitter {
     releaseDate: null,
     releaseNotes: null,
   }
-  private isDockerEnvironment: boolean = false
+  private isDisabled: boolean = false
 
   private constructor() {
     super()
-    // Check if running in Docker environment
-    this.isDockerEnvironment = this.checkDockerEnvironment()
-    if (this.isDockerEnvironment) {
-      console.log('[Updater] Running in Docker environment, auto-updater disabled')
+    // Check if updater should be disabled
+    this.isDisabled = this.shouldDisableUpdater()
+    if (this.isDisabled) {
+      console.log('[Updater] Auto-updater disabled via environment variable')
     } else {
       this.setupAutoUpdater()
     }
   }
 
-  private checkDockerEnvironment(): boolean {
-    // Check if app is properly initialized
-    if (!app || typeof app.getVersion !== 'function') {
+  private shouldDisableUpdater(): boolean {
+    // Force disable via environment variable
+    if (process.env.DISABLE_AUTO_UPDATER === 'true' ||
+        process.env.CHAT2API_DISABLE_UPDATER === 'true' ||
+        process.env.DOCKER === 'true') {
       return true
     }
-
-    // Check for common Docker environment indicators
-    const isDocker = process.env.TERM === 'dumb' ||
-                     process.env.DOCKER_CONTAINER === 'true' ||
-                     process.env.KUBERNETES_SERVICE_HOST !== undefined
-
-    return isDocker
+    return false
   }
 
   public static getInstance(): UpdaterManager {
@@ -157,8 +153,7 @@ export class UpdaterManager extends EventEmitter {
   }
 
   public async checkForUpdates(): Promise<void> {
-    if (this.isDockerEnvironment) {
-      console.log('[Updater] Auto-updater disabled in Docker environment')
+    if (this.isDisabled) {
       return
     }
 
@@ -184,8 +179,7 @@ export class UpdaterManager extends EventEmitter {
   }
 
   public async downloadUpdate(): Promise<void> {
-    if (this.isDockerEnvironment) {
-      console.log('[Updater] Auto-updater disabled in Docker environment')
+    if (this.isDisabled) {
       return
     }
 
@@ -220,8 +214,7 @@ export class UpdaterManager extends EventEmitter {
   }
 
   public quitAndInstall(): void {
-    if (this.isDockerEnvironment) {
-      console.log('[Updater] Auto-updater disabled in Docker environment')
+    if (this.isDisabled) {
       return
     }
 
