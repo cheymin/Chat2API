@@ -66,11 +66,11 @@ RUN mkdir -p /root/.chat2api
 ENV NODE_ENV=production
 ENV DISPLAY=:99
 
-# Create startup script
+# Create startup script for Docker headless mode
 RUN echo '#!/bin/bash\n\
 Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &\n\
 sleep 1\n\
-node ./out/main/index.js --no-sandbox\n\
+electron ./out/main/index-docker.js --no-sandbox\n\
 ' > /app/start.sh && chmod +x /app/start.sh
 
 # Expose proxy port (default: 8080)

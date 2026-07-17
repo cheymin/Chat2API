@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, app } from 'electron'
 import { autoUpdater, UpdateInfo } from 'electron-updater'
 import { EventEmitter } from 'events'
 import { IpcChannels } from '../ipc/channels'
@@ -45,10 +45,31 @@ export class UpdaterManager extends EventEmitter {
     releaseDate: null,
     releaseNotes: null,
   }
+  private isDockerEnvironment: boolean = false
 
   private constructor() {
     super()
-    this.setupAutoUpdater()
+    // Check if running in Docker environment
+    this.isDockerEnvironment = this.checkDockerEnvironment()
+    if (this.isDockerEnvironment) {
+      console.log('[Updater] Running in Docker environment, auto-updater disabled')
+    } else {
+      this.setupAutoUpdater()
+    }
+  }
+
+  private checkDockerEnvironment(): boolean {
+    // Check if app is properly initialized
+    if (!app || typeof app.getVersion !== 'function') {
+      return true
+    }
+
+    // Check for common Docker environment indicators
+    const isDocker = process.env.TERM === 'dumb' ||
+                     process.env.DOCKER_CONTAINER === 'true' ||
+                     process.env.KUBERNETES_SERVICE_HOST !== undefined
+
+    return isDocker
   }
 
   public static getInstance(): UpdaterManager {
@@ -136,6 +157,11 @@ export class UpdaterManager extends EventEmitter {
   }
 
   public async checkForUpdates(): Promise<void> {
+    if (this.isDockerEnvironment) {
+      console.log('[Updater] Auto-updater disabled in Docker environment')
+      return
+    }
+
     if (this.status.checking) {
       console.log('[Updater] Already checking for updates')
       return
@@ -158,6 +184,11 @@ export class UpdaterManager extends EventEmitter {
   }
 
   public async downloadUpdate(): Promise<void> {
+    if (this.isDockerEnvironment) {
+      console.log('[Updater] Auto-updater disabled in Docker environment')
+      return
+    }
+
     if (!this.status.available) {
       const error = 'No update available to download'
       console.error('[Updater]', error)
@@ -189,6 +220,11 @@ export class UpdaterManager extends EventEmitter {
   }
 
   public quitAndInstall(): void {
+    if (this.isDockerEnvironment) {
+      console.log('[Updater] Auto-updater disabled in Docker environment')
+      return
+    }
+
     if (!this.status.downloaded) {
       const error = 'No update downloaded to install'
       console.error('[Updater]', error)
