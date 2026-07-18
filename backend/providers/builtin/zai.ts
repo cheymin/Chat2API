@@ -1,0 +1,65 @@
+import type { BuiltinProviderConfig } from '../../store/types'
+
+export const zaiConfig: BuiltinProviderConfig = {
+  id: 'zai',
+  name: 'Z.ai',
+  type: 'builtin',
+  authType: 'jwt',
+  apiEndpoint: 'https://chat.z.ai/api',
+  chatPath: '/v2/chat/completions',
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': '*/*',
+    'Accept-Encoding': 'gzip, deflate, br, zstd',
+    'Accept-Language': 'zh-CN',
+    'Cache-Control': 'no-cache',
+    'Origin': 'https://chat.z.ai',
+    'Pragma': 'no-cache',
+    'Sec-Ch-Ua': '"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"',
+    'Sec-Ch-Ua-Mobile': '?0',
+    'Sec-Ch-Ua-Platform': '"Windows"',
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Site': 'same-origin',
+    'X-FE-Version': 'prod-fe-1.1.42',
+    'X-Region': 'domestic',
+  },
+  enabled: true,
+  description: 'Z.ai - Temporarily unavailable due to frontend captcha risk control. Browser-side verification state cannot be stably replayed by the proxy.',
+  supportedModels: [
+    'GLM-5.2',
+    'GLM-5-Turbo',
+    'GLM-5V-Turbo',
+    'GLM-5',
+    'GLM-4.7',
+  ],
+  modelMappings: {
+    'GLM-5.2': 'GLM-5.2',
+    'GLM-5-Turbo': 'GLM-5-Turbo',
+    'GLM-5V-Turbo': 'GLM-5v-Turbo',
+    'GLM-5': 'glm-5',
+    'GLM-4.7': 'glm-4.7',
+  },
+  credentialFields: [
+    {
+      name: 'token',
+      label: 'Access Token',
+      type: 'password',
+      required: true,
+      placeholder: 'Enter Z.ai JWT Token',
+      helpText: 'Z.ai is currently unavailable in proxy mode due to frontend captcha risk control. Browser-side verification state cannot be stably replayed by copied headers, HAR parameters, chat_id, or parent_message_id.',
+    },
+    {
+      name: 'captcha_verify_param',
+      label: 'Captcha Verify Param',
+      type: 'password',
+      required: false,
+      placeholder: 'Optional debug field from chat.z.ai HAR',
+      helpText: 'Debug only. This short-lived field still cannot reliably bypass Z.ai frontend captcha risk control.',
+    },
+  ],
+  tokenCheckEndpoint: '/api/v1/users/user/settings',
+  tokenCheckMethod: 'GET',
+}
+
+export default zaiConfig

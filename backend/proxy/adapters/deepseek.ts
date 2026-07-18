@@ -1,0 +1,693 @@
+/**
+ * DeepSeek Adapter
+ * Implements DeepSeek web API protocol
+ * 
+ * NOTE: Tool prompt injection is handled by Forwarder.transformRequestForPromptToolUse()
+ * This adapter only handles message format conversion and API communication
+ */
+
+import axios, { AxiosResponse } from 'axios'
+import { getDeepSeekHash } from '../../lib/challenge'
+import type { Account, Provider } from '../../store/types'
+import { resolveDeepSeekChatOptions } from './providerModelOptions'
+import { getProviderToolProfile } from '../toolCalling/providerProfiles'
+import { extractMessageText } from '../utils/messageContent'
+
+const DEEPSEEK_API_BASE = 'https://chat.deepseek.com/api'
+
+/**
+ * Browser fingerprint pool.
+ * Each profile groups the headers that must be internally consistent:
+ *   User-Agent, Sec-Ch-Ua, Sec-Ch-Ua-Platform, Accept-Language.
+ * A profile is chosen once per DeepSeekAdapter instance so all requests
+ * from the same logical "session" share the same fingerprint.
+ */
+interface BrowserProfile {
+  'User-Agent': string
+  'Sec-Ch-Ua': string
+  'Sec-Ch-Ua-Platform': string
+  'Accept-Language': string
+}
+
+const BROWSER_PROFILES: BrowserProfile[] = [
+  // macOS Chrome 136
+  {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+    'Sec-Ch-Ua': '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+    'Sec-Ch-Ua-Platform': '"macOS"',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+  },
+  // macOS Chrome 135
+  {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+    'Sec-Ch-Ua': '"Chromium";v="135", "Google Chrome";v="135", "Not.A/Brand";v="24"',
+    'Sec-Ch-Ua-Platform': '"macOS"',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+  },
+  // macOS Chrome 134
+  {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+    'Sec-Ch-Ua': '"Chromium";v="134", "Google Chrome";v="134", "Not.A/Brand";v="99"',
+    'Sec-Ch-Ua-Platform': '"macOS"',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,ja;q=0.7',
+  },
+  // macOS Chrome 133
+  {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+    'Sec-Ch-Ua': '"Chromium";v="133", "Google Chrome";v="133", "Not-A.Brand";v="24"',
+    'Sec-Ch-Ua-Platform': '"macOS"',
+    'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8',
+  },
+  // Windows Chrome 136
+  {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+    'Sec-Ch-Ua': '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+    'Sec-Ch-Ua-Platform': '"Windows"',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+  },
+  // Windows Chrome 135
+  {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+    'Sec-Ch-Ua': '"Chromium";v="135", "Google Chrome";v="135", "Not.A/Brand";v="24"',
+    'Sec-Ch-Ua-Platform': '"Windows"',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+  },
+  // Windows Chrome 134
+  {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+    'Sec-Ch-Ua': '"Chromium";v="134", "Google Chrome";v="134", "Not.A/Brand";v="99"',
+    'Sec-Ch-Ua-Platform': '"Windows"',
+    'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8',
+  },
+  // Windows Chrome 133
+  {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+    'Sec-Ch-Ua': '"Chromium";v="133", "Google Chrome";v="133", "Not-A.Brand";v="24"',
+    'Sec-Ch-Ua-Platform': '"Windows"',
+    'Accept-Language': 'zh-CN,zh-TW;q=0.9,zh;q=0.8,en;q=0.7',
+  },
+  // Windows 11 Edge 136
+  {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0',
+    'Sec-Ch-Ua': '"Chromium";v="136", "Microsoft Edge";v="136", "Not.A/Brand";v="8"',
+    'Sec-Ch-Ua-Platform': '"Windows"',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+  },
+  // Windows 11 Edge 135
+  {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0',
+    'Sec-Ch-Ua': '"Chromium";v="135", "Microsoft Edge";v="135", "Not.A/Brand";v="99"',
+    'Sec-Ch-Ua-Platform': '"Windows"',
+    'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8',
+  },
+  // macOS Safari 18.3
+  {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15',
+    'Sec-Ch-Ua': '"Not/A)Brand";v="8", "Safari";v="18"',
+    'Sec-Ch-Ua-Platform': '"macOS"',
+    'Accept-Language': 'zh-CN,zh-Hans;q=0.9',
+  },
+  // macOS Safari 18.2
+  {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15',
+    'Sec-Ch-Ua': '"Not/A)Brand";v="8", "Safari";v="18"',
+    'Sec-Ch-Ua-Platform': '"macOS"',
+    'Accept-Language': 'en-US,en;q=0.9',
+  },
+  // macOS Safari 17.6
+  {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15',
+    'Sec-Ch-Ua': '"Not/A)Brand";v="99", "Safari";v="17"',
+    'Sec-Ch-Ua-Platform': '"macOS"',
+    'Accept-Language': 'zh-CN,zh-Hans;q=0.9,en;q=0.8',
+  },
+  // Linux Chrome 135
+  {
+    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+    'Sec-Ch-Ua': '"Chromium";v="135", "Google Chrome";v="135", "Not.A/Brand";v="24"',
+    'Sec-Ch-Ua-Platform': '"Linux"',
+    'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
+  },
+  // Linux Chrome 134
+  {
+    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+    'Sec-Ch-Ua': '"Chromium";v="134", "Google Chrome";v="134", "Not.A/Brand";v="99"',
+    'Sec-Ch-Ua-Platform': '"Linux"',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8',
+  },
+  // Linux Firefox 133
+  {
+    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0',
+    'Sec-Ch-Ua': '',
+    'Sec-Ch-Ua-Platform': '"Linux"',
+    'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8',
+  },
+  // Windows Firefox 134
+  {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0',
+    'Sec-Ch-Ua': '',
+    'Sec-Ch-Ua-Platform': '"Windows"',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8',
+  },
+  // macOS Firefox 133
+  {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0',
+    'Sec-Ch-Ua': '',
+    'Sec-Ch-Ua-Platform': '"macOS"',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+  },
+]
+
+function pickBrowserProfile(): BrowserProfile {
+  return BROWSER_PROFILES[Math.floor(Math.random() * BROWSER_PROFILES.length)]
+}
+
+/** Base headers that do not vary across browser profiles */
+const BASE_HEADERS = {
+  Accept: '*/*',
+  'Accept-Encoding': 'gzip, deflate, br, zstd',
+  Origin: 'https://chat.deepseek.com',
+  Referer: 'https://chat.deepseek.com/',
+  'Sec-Ch-Ua-Mobile': '?0',
+  'Sec-Fetch-Dest': 'empty',
+  'Sec-Fetch-Mode': 'cors',
+  'Sec-Fetch-Site': 'same-origin',
+  'X-App-Version': '2.0.0',
+  'X-Client-Locale': 'zh_CN',
+  'X-Client-Platform': 'web',
+  'x-Client-Timezone-Offset': '28800',
+  'X-Client-Version': '2.0.0',
+}
+
+function buildHeaders(profile: BrowserProfile): Record<string, string> {
+  return { ...BASE_HEADERS, ...profile }
+}
+
+
+interface TokenInfo {
+  accessToken: string
+  refreshToken: string
+  expiresAt: number
+}
+
+interface ChallengeResponse {
+  algorithm: string
+  challenge: string
+  salt: string
+  difficulty: number
+  expire_at: number
+  signature: string
+}
+
+interface DeepSeekMessage {
+  role: 'user' | 'assistant' | 'system' | 'tool'
+  content: string | null
+  tool_call_id?: string
+  tool_calls?: any[]
+}
+
+interface ChatCompletionRequest {
+  model: string
+  messages: DeepSeekMessage[]
+  stream?: boolean
+  temperature?: number
+  web_search?: boolean
+  reasoning_effort?: 'low' | 'medium' | 'high'
+  tools?: any[]
+  tool_choice?: any
+}
+
+const tokenCache = new Map<string, TokenInfo>()
+const sessionCache = new Map<string, { sessionId: string; createdAt: number }>()
+
+function generateRandomString(length: number, charset: string = 'alphanumeric'): string {
+  const sets = {
+    numeric: '0123456789',
+    alphabetic: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
+    alphanumeric: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
+    hex: '0123456789abcdef',
+  }
+  const chars = sets[charset as keyof typeof sets] || sets.alphanumeric
+  let result = ''
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return result
+}
+
+function uuid(separator: boolean = true): string {
+  const id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+  return separator ? id : id.replace(/-/g, '')
+}
+
+function generateCookie(): string {
+  const timestamp = Date.now()
+  return `intercom-HWWAFSESTIME=${timestamp}; HWWAFSESID=${generateRandomString(18, 'hex')}; Hm_lvt_${uuid(false)}=${Math.floor(timestamp / 1000)},${Math.floor(timestamp / 1000)},${Math.floor(timestamp / 1000)}; Hm_lpvt_${uuid(false)}=${Math.floor(timestamp / 1000)}; _frid=${uuid(false)}; _fr_ssid=${uuid(false)}; _fr_pvid=${uuid(false)}`
+}
+
+function unixTimestamp(): number {
+  return Math.floor(Date.now() / 1000)
+}
+
+/**
+ * Simulate human thinking time before sending request
+ * Returns a random delay between min and max milliseconds
+ */
+function getHumanThinkingDelay(): number {
+  const minDelay = 800
+  const maxDelay = 2500
+  return Math.floor(Math.random() * (maxDelay - minDelay) + minDelay)
+}
+
+/**
+ * Simulate typing speed - calculate delay based on message length
+ * For short messages: simulate realistic typing delay
+ * For long messages: cap the delay to avoid excessive waiting
+ */
+function getTypingDelay(messageLength: number): number {
+  if (messageLength === 0) return 0
+  
+  // For short messages (< 50 chars), use realistic typing speed
+  if (messageLength < 50) {
+    const charsPerSecond = 4 + Math.random() * 2 // 4-6 chars/sec
+    const typingTime = (messageLength / charsPerSecond) * 1000
+    return Math.floor(typingTime * 0.5) // Use 50% of calculated time
+  }
+  
+  // For medium messages (50-200 chars), use scaled delay
+  if (messageLength < 200) {
+    return Math.floor(Math.random() * 1000 + 1000) // 1-2 seconds
+  }
+  
+  // For long messages (200+ chars), use fixed cap to avoid long waits
+  // Assumption: user copy-pasted or typed very fast
+  return Math.floor(Math.random() * 1500 + 1500) // 1.5-3 seconds max
+}
+
+/**
+ * Add random jitter to simulate network variance
+ */
+function getNetworkJitter(): number {
+  return Math.floor(Math.random() * 300 + 100)
+}
+
+export class DeepSeekAdapter {
+  private provider: Provider
+  private account: Account
+  private token: string
+  private headers: Record<string, string>
+  private lastRequestTime: number = 0
+  private requestCount: number = 0
+
+  constructor(provider: Provider, account: Account) {
+    this.provider = provider
+    this.account = account
+    this.token = account.credentials.token || account.credentials.apiKey || account.credentials.refreshToken || ''
+    this.headers = buildHeaders(pickBrowserProfile())
+  }
+
+  /**
+   * Simulate human behavior delay before making API request
+   * DISABLED: Returns immediately for faster responses
+   */
+  private async simulateHumanBehavior(messageContent: string = ''): Promise<void> {
+    // Delay disabled - return immediately for fast responses
+    console.log('[DeepSeek] Human behavior simulation disabled for fast responses')
+    this.lastRequestTime = Date.now()
+    this.requestCount++
+    return
+  }
+
+  private async acquireToken(): Promise<string> {
+    if (!this.token) {
+      throw new Error('DeepSeek Token not configured, please add Token in account settings')
+    }
+
+    const cached = tokenCache.get(this.token)
+    if (cached && cached.expiresAt > unixTimestamp()) {
+      return cached.accessToken
+    }
+
+    console.log('[DeepSeek] Acquiring token...')
+    
+    const result = await axios.get(`${DEEPSEEK_API_BASE}/v0/users/current`, {
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        ...this.headers,
+      },
+      timeout: 15000,
+      validateStatus: () => true,
+    })
+
+    if (result.status === 401 || result.status === 403) {
+      throw new Error(`Token invalid or expired, please get a new Token`)
+    }
+
+    if (result.status !== 200) {
+      throw new Error(`Failed to acquire token: HTTP ${result.status}`)
+    }
+
+    // Response structure: { code: 0, data: { biz_code: 0, biz_data: { token: "..." } } }
+    const bizData = result.data?.data?.biz_data || result.data?.biz_data
+    if (!bizData?.token) {
+      const errorMsg = result.data?.msg || result.data?.data?.biz_msg || 'Unknown error'
+      throw new Error(`Failed to acquire token: ${errorMsg}`)
+    }
+
+    const accessToken = bizData.token
+    tokenCache.set(this.token, {
+      accessToken,
+      refreshToken: this.token,
+      expiresAt: unixTimestamp() + 3600,
+    })
+
+    console.log('[DeepSeek] Token acquired successfully')
+    return accessToken
+  }
+
+  private async createSession(): Promise<string> {
+    const cacheKey = this.account.id
+    const cached = sessionCache.get(cacheKey)
+    if (cached && Date.now() - cached.createdAt < 300000) {
+      return cached.sessionId
+    }
+
+    const token = await this.acquireToken()
+    const result = await axios.post(
+      `${DEEPSEEK_API_BASE}/v0/chat_session/create`,
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...this.headers,
+          Cookie: generateCookie(),
+        },
+        timeout: 15000,
+        validateStatus: () => true,
+      }
+    )
+
+    console.log('[DeepSeek] Create session completed, status:', result.status)
+    console.log('[DeepSeek] Create session response:', JSON.stringify(result.data, null, 2))
+
+    // Response structure: { code: 0, data: { biz_code: 0, biz_data: { chat_session: { id: "..." } } } }
+    // Or newer format: { code: 0, data: { biz_code: 0, biz_data: { id: "..." } } }
+    const bizData = result.data?.data?.biz_data || result.data?.biz_data
+    
+    // Try both old and new response formats
+    const sessionId = bizData?.chat_session?.id || bizData?.id
+    
+    if (result.status !== 200 || !sessionId) {
+      console.error('[DeepSeek] Create session failed, response:', JSON.stringify(result.data))
+      throw new Error(`Failed to create session: ${result.data?.msg || result.data?.data?.biz_msg || result.status}`)
+    }
+    sessionCache.set(cacheKey, { sessionId, createdAt: Date.now() })
+
+    return sessionId
+  }
+
+  async deleteSession(sessionId: string): Promise<boolean> {
+    try {
+      const token = await this.acquireToken()
+      const result = await axios.post(
+        `${DEEPSEEK_API_BASE}/v0/chat_session/delete`,
+        { chat_session_id: sessionId },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            ...this.headers,
+          },
+          timeout: 15000,
+          validateStatus: () => true,
+        }
+      )
+
+      console.log('[DeepSeek] Delete session completed, status:', result.status)
+
+      const success = result.status === 200 && result.data?.code === 0
+      if (success) {
+        // Clear cache
+        const cacheKey = this.account.id
+        sessionCache.delete(cacheKey)
+        console.log('[DeepSeek] Session deleted:', sessionId)
+      }
+      return success
+    } catch (error) {
+      console.error('[DeepSeek] Failed to delete session:', error)
+      return false
+    }
+  }
+
+  private async getChallenge(targetPath: string): Promise<ChallengeResponse> {
+    const token = await this.acquireToken()
+    const result = await axios.post(
+      `${DEEPSEEK_API_BASE}/v0/chat/create_pow_challenge`,
+      { target_path: targetPath },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...this.headers,
+        },
+        timeout: 15000,
+        validateStatus: () => true,
+      }
+    )
+
+    // Response structure: { code: 0, data: { biz_code: 0, biz_data: { challenge: {...} } } }
+    const bizData = result.data?.data?.biz_data || result.data?.biz_data
+    if (result.status !== 200 || !bizData?.challenge) {
+      throw new Error(`Failed to get challenge: ${result.data?.msg || result.data?.data?.biz_msg || result.status}`)
+    }
+
+    return bizData.challenge
+  }
+
+  private async calculateChallengeAnswer(challenge: ChallengeResponse): Promise<string> {
+    const { algorithm, challenge: challengeStr, salt, difficulty, expire_at, signature } = challenge
+    
+    if (algorithm !== 'DeepSeekHashV1') {
+      throw new Error(`Unsupported algorithm: ${algorithm}`)
+    }
+    
+    console.log('[DeepSeek] Challenge parameters:', { difficulty })
+    
+    const deepSeekHash = await getDeepSeekHash()
+    const answer = deepSeekHash.calculateHash(algorithm, challengeStr, salt, difficulty, expire_at)
+    
+    if (answer === undefined) {
+      throw new Error('Challenge calculation failed')
+    }
+    
+    console.log('[DeepSeek] Challenge answer found:', answer)
+
+    return Buffer.from(JSON.stringify({
+      algorithm,
+      challenge: challengeStr,
+      salt,
+      answer,
+      signature,
+      target_path: '/api/v0/chat/completion',
+    })).toString('base64')
+  }
+
+  private messagesToPrompt(messages: DeepSeekMessage[], isMultiTurn: boolean = false): string {
+    const toolProfile = getProviderToolProfile('deepseek')
+    const processedMessages = messages.map(message => {
+      let text: string
+
+      // Handle tool calls in assistant message
+      if (message.role === 'assistant' && message.tool_calls && message.tool_calls.length > 0) {
+        text = toolProfile.formatAssistantToolCalls(message.tool_calls.map(tc => ({
+          id: tc.id,
+          name: tc.function.name,
+          arguments: tc.function.arguments,
+        })))
+      }
+      // Handle tool response message
+      else if (message.role === 'tool' && message.tool_call_id) {
+        text = toolProfile.formatToolResult({
+          toolCallId: message.tool_call_id,
+          content: String(message.content || ''),
+        })
+      }
+      else {
+        text = extractMessageText(message)
+      }
+      return { role: message.role, text }
+    })
+
+    if (processedMessages.length === 0) return ''
+
+    // For multi-turn mode, only send the last user message
+    if (isMultiTurn) {
+      let lastUserIdx = -1
+      for (let i = processedMessages.length - 1; i >= 0; i--) {
+        if (processedMessages[i].role === 'user') {
+          lastUserIdx = i
+          break
+        }
+      }
+      
+      if (lastUserIdx !== -1) {
+        const lastUserMsg = processedMessages[lastUserIdx]
+        let text = lastUserMsg.text
+        for (let i = lastUserIdx + 1; i < processedMessages.length; i++) {
+          if (processedMessages[i].role === 'tool') {
+            text += `\n\n${processedMessages[i].text}`
+          }
+        }
+        return `<｜User｜>${text}`
+      }
+    }
+
+    const mergedBlocks: { role: string; text: string }[] = []
+    let currentBlock = { ...processedMessages[0] }
+
+    for (let i = 1; i < processedMessages.length; i++) {
+      const msg = processedMessages[i]
+      if (msg.role === currentBlock.role) {
+        currentBlock.text += `\n\n${msg.text}`
+      } else {
+        mergedBlocks.push(currentBlock)
+        currentBlock = { ...msg }
+      }
+    }
+    mergedBlocks.push(currentBlock)
+
+    return mergedBlocks
+      .map((block, index) => {
+        if (block.role === 'assistant') {
+          return `<｜Assistant｜>${block.text}<｜end of sentence｜>`
+        }
+        if (block.role === 'user' || block.role === 'system') {
+          return index > 0 ? `<｜User｜>${block.text}` : block.text
+        }
+        if (block.role === 'tool') {
+          return `<｜User｜>${block.text}`
+        }
+        return block.text
+      })
+      .join('')
+      .replace(/!\[.+\]\(.+\)/g, '')
+  }
+
+  async chatCompletion(request: ChatCompletionRequest): Promise<{ response: AxiosResponse; sessionId: string }> {
+    const token = await this.acquireToken()
+    
+    const sessionId = await this.createSession()
+    console.log('[DeepSeek] Created new session:', sessionId)
+    
+    const challenge = await this.getChallenge('/api/v0/chat/completion')
+    const challengeAnswer = await this.calculateChallengeAnswer(challenge)
+
+    // Clone messages to avoid modifying original request
+    // Note: Tool prompt injection is already handled by Forwarder.transformRequestForPromptToolUse()
+    const messages = [...request.messages]
+
+    let prompt = this.messagesToPrompt(messages, false)
+    
+    // Simulate human behavior before sending request
+    await this.simulateHumanBehavior(prompt)
+
+    console.log('[DeepSeek] Prompt length:', prompt.length, 'message count:', messages.length)
+    if (!prompt.trim()) {
+      console.error('[DeepSeek] Empty prompt — message summary:', JSON.stringify(
+        messages.map((m) => ({ role: m.role, len: extractMessageText(m).length }))
+      ))
+      throw new Error(
+        'DeepSeek prompt is empty: no extractable user message content. ' +
+        'Ensure messages use role "user" with string or text/input_text content parts.'
+      )
+    }
+
+    const { modelType, searchEnabled, thinkingEnabled } = resolveDeepSeekChatOptions(request, prompt)
+    console.log('[DeepSeek] Request options:', { modelType, searchEnabled, thinkingEnabled })
+
+    if (request.web_search || request.model.toLowerCase().includes('search')) {
+      console.log('[DeepSeek] Web search enabled')
+    }
+
+    if (request.reasoning_effort || thinkingEnabled) {
+      console.log('[DeepSeek] Reasoning mode enabled, effort:', request.reasoning_effort)
+    }
+
+    const response = await axios.post(
+      `${DEEPSEEK_API_BASE}/v0/chat/completion`,
+      {
+        chat_session_id: sessionId,
+        parent_message_id: null,
+        prompt,
+        model_type: modelType,
+        ref_file_ids: [],
+        search_enabled: searchEnabled,
+        thinking_enabled: thinkingEnabled,
+        preempt: false,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...this.headers,
+          Referer: `https://chat.deepseek.com/a/chat/s/${sessionId}`,
+          Cookie: generateCookie(),
+          'X-Ds-Pow-Response': challengeAnswer,
+        },
+        timeout: 120000,
+        validateStatus: () => true,
+        responseType: 'stream',
+      }
+    )
+
+    return { response, sessionId }
+  }
+
+  async deleteAllChats(): Promise<boolean> {
+    try {
+      const token = await this.acquireToken()
+      const result = await axios.post(
+        `${DEEPSEEK_API_BASE}/v0/chat_session/delete_all`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            ...this.headers,
+          },
+          timeout: 30000,
+          validateStatus: () => true,
+        }
+      )
+
+      console.log('[DeepSeek] Delete all chats response:', JSON.stringify(result.data, null, 2))
+
+      const success = result.status === 200 && result.data?.code === 0
+      if (success) {
+        sessionCache.clear()
+        console.log('[DeepSeek] All chats deleted')
+      }
+      return success
+    } catch (error) {
+      console.error('[DeepSeek] Failed to delete all chats:', error)
+      return false
+    }
+  }
+
+  static isDeepSeekProvider(provider: Provider): boolean {
+    return provider.id === 'deepseek' || provider.apiEndpoint.includes('deepseek.com')
+  }
+
+  /**
+   * Clear session cache for a specific account
+   * This should be called when a session is deleted externally (e.g., from web)
+   */
+  static clearSessionCache(accountId: string): void {
+    sessionCache.delete(accountId)
+    console.log('[DeepSeek] Cleared session cache for account:', accountId)
+  }
+}
+
+export const deepSeekAdapter = {
+  DeepSeekAdapter,
+}
