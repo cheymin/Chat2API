@@ -1,95 +1,81 @@
-# Dockerfile for Chat2API Manager
-# Multi-stage build for optimized image size
+# Dockerfile for Chat2API Manager - Headless Node.js Server
+# Produces a self-contained image: FROM ghcr.io/cheymin/chat2api:latest && run
+#
+# Build:  docker build -t chat2api .
+# Run:    docker run -d -p 8080:8080 -v chat2api-data:/root/.chat2api chat2api
 
-# Stage 1: Build stage
+# ============================================================
+# Stage 1: Build (compile TypeScript -> JS via electron-vite)
+# ============================================================
 FROM node:20-bookworm AS builder
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
-    git \
+WORKDIR /app
+
+# Copy package manifests first for better layer caching
+COPY package*.json ./
+COPY electron.vite.config.ts ./
+COPY tsconfig*.json ./
+
+# Install ALL dependencies (including devDeps needed for the build)
+RUN npm ci --no-audit --no-fund
+
+# Copy source
+COPY src ./src
+COPY build ./build
+COPY scripts ./scripts
+COPY sha3_wasm_bg.7b9ca65ddd.wasm* ./
+
+# Build the main process bundle (includes index-docker.js)
+RUN npx electron-vite build
+
+# Prune dev dependencies so the runtime image only carries production deps
+RUN npm prune --omit=dev --no-audit --no-fund || true
+
+# ============================================================
+# Stage 2: Runtime (plain Node.js, no Electron, no Xvfb)
+# ============================================================
+FROM node:20-bookworm-slim AS runtime
+
+WORKDIR /app
+
+# Install minimal runtime libs (no GUI/X11 needed for headless Node server)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
-WORKDIR /app
-
-# Copy package files
-COPY package*.json ./
-
-# Install dependencies
-RUN npm ci
-
-# Copy source code
-COPY . .
-
-# Build application
-RUN npm run build
-
-# Stage 2: Production stage
-FROM node:20-bookworm-slim
-
-# Install runtime dependencies and Xvfb for headless mode
-RUN apt-get update && apt-get install -y \
-    xvfb \
-    libgtk-3-0 \
-    libnotify4 \
-    libnss3 \
-    libxss1 \
-    libxtst6 \
-    xdg-utils \
-    libatspi2.0-0 \
-    libuuid1 \
-    libappindicator3-1 \
-    libasound2 \
-    libdrm2 \
-    libgbm1 \
-    libxkbcommon0 \
-    libxshmfence1 \
-    libglu1-mesa \
-    fonts-liberation \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set working directory
-WORKDIR /app
-
-# Copy built application from builder stage
+# Copy built main bundle + renderer (renderer is unused in headless but kept for parity)
 COPY --from=builder /app/out ./out
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/sha3_wasm_bg.7b9ca65ddd.wasm ./sha3_wasm_bg.7b9ca65ddd.wasm
 
-# Create data directory for persistent storage
+# Data directory (mounted as a volume for persistence)
 RUN mkdir -p /root/.chat2api
+VOLUME /root/.chat2api
 
-# Set environment variables
+# Environment
 ENV NODE_ENV=production
-ENV DISPLAY=:99
 ENV DOCKER=true
 ENV DISABLE_AUTO_UPDATER=true
+ENV PORT=8080
+ENV HOST=0.0.0.0
 
-# Create startup script for Docker headless mode
-RUN echo '#!/bin/bash\n\
-Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &\n\
-sleep 1\n\
-electron ./out/main/index-docker.js --no-sandbox\n\
-' > /app/start.sh && chmod +x /app/start.sh
-
-# Expose proxy port (default: 8080)
+# Expose proxy port
 EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:8080/v1/models', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+# Health check hits the models endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD node -e "require('http').get('http://127.0.0.1:'+(process.env.PORT||8080)+'/v1/models',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-# Labels for GitHub Packages
+# Labels for GHCR
 LABEL org.opencontainers.image.title="Chat2API Manager"
-LABEL org.opencontainers.image.description="OpenAI-compatible API proxy for multiple AI service providers"
+LABEL org.opencontainers.image.description="OpenAI-compatible API proxy for multiple AI service providers (headless)"
 LABEL org.opencontainers.image.version="1.4.0"
-LABEL org.opencontainers.image.authors="Chat2API Team <support@chat2api.com>"
-LABEL org.opencontainers.image.url="https://github.com/xiaoY233/Chat2API"
-LABEL org.opencontainers.image.source="https://github.com/xiaoY233/Chat2API"
+LABEL org.opencontainers.image.authors="Chat2API Team"
+LABEL org.opencontainers.image.url="https://github.com/cheymin/Chat2API"
+LABEL org.opencontainers.image.source="https://github.com/cheymin/Chat2API"
 LABEL org.opencontainers.image.licenses="GPL-3.0"
 
-# Default command
-CMD ["/app/start.sh"]
+# Start the headless Node.js server (no Electron runtime required)
+CMD ["node", "out/main/index-docker.js"]
