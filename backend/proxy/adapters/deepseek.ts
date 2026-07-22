@@ -625,6 +625,7 @@ export class DeepSeekAdapter {
         ref_file_ids: [],
         search_enabled: searchEnabled,
         thinking_enabled: thinkingEnabled,
+        action: null,
         preempt: false,
       },
       {

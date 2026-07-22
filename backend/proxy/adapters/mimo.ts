@@ -337,7 +337,7 @@ export class MimoAdapter {
   }
 
   private buildUrl(path: string, phToken: string): string {
-    return `${MIMO_API_BASE}${path}?xiaomichatbot_ph=${encodeURIComponent(phToken)}`
+    return `${MIMO_API_BASE}${path}?xiaomichatbot_ph=${encodeURIComponent(decodeURIComponent(phToken))}`
   }
 
   private buildHeaders(serviceToken: string, userId: string, phToken: string): Record<string, string> {
@@ -446,9 +446,7 @@ export class MimoAdapter {
       modelConfig: {
         enableThinking,
         webSearchStatus: 'disabled',
-        model: request.model,
-        temperature: request.temperature ?? 0.8,
-        topP: 0.95,
+        model: request.model.toLowerCase(),
       },
       multiMedias: [],
     }
@@ -474,7 +472,7 @@ export class MimoAdapter {
       throw new Error('Mimo credentials not configured')
     }
 
-    const url = `${MIMO_API_BASE}/open-apis/chat/conversation/list?xiaomichatbot_ph=${encodeURIComponent(phToken)}`
+    const url = `${MIMO_API_BASE}/open-apis/chat/conversation/list?xiaomichatbot_ph=${encodeURIComponent(decodeURIComponent(phToken))}`
 
     const response = await axios.post(
       url,
@@ -523,7 +521,7 @@ export class MimoAdapter {
       throw new Error('Mimo credentials not configured')
     }
 
-    const url = `${MIMO_API_BASE}/open-apis/chat/conversation/delete?xiaomichatbot_ph=${encodeURIComponent(phToken)}`
+    const url = `${MIMO_API_BASE}/open-apis/chat/conversation/delete?xiaomichatbot_ph=${encodeURIComponent(decodeURIComponent(phToken))}`
 
     const response = await axios.post(
       url,

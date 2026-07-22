@@ -46,7 +46,10 @@ export function createKimiChatPayload(options: {
   return {
     scenario,
     chat_id: '',
-    tools: options.enableWebSearch ? [{ type: 'TOOL_TYPE_SEARCH', search: {} }] : [],
+    tools: [
+      ...(options.enableWebSearch ? [{ type: 'TOOL_TYPE_SEARCH', search: {} }] : []),
+      { type: 'TOOL_TYPE_CRON_JOB' }
+    ],
     message: {
       parent_id: '',
       role: 'user',
@@ -55,10 +58,14 @@ export function createKimiChatPayload(options: {
         text: { content: options.content }
       }],
       scenario,
+      is_goal: false,
     },
     options: {
-      thinking: options.enableThinking
-    }
+      thinking: options.enableThinking,
+      enable_plugin: true,
+      reasoning_effort: 'REASONING_EFFORT_NONE'
+    },
+    project_id: ''
   }
 }
 

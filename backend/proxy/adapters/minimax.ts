@@ -215,36 +215,44 @@ export class MiniMaxAdapter {
     method: string,
     uri: string,
     data: any,
-    deviceInfo: DeviceInfo
+    deviceInfo: DeviceInfo,
+    isStream: boolean = false
   ): Promise<AxiosResponse> {
-    const unix = `${Date.now()}`
-    const timestamp = unixTimestamp()
+    const unix = `${Date.now()}`;
+    const timestamp = unixTimestamp();
     
-    const userData = { ...FAKE_USER_DATA }
-    const realUserID = deviceInfo.realUserID || deviceInfo.userId
-    userData.uuid = realUserID
-    userData.device_id = deviceInfo.deviceId || undefined
-    userData.user_id = realUserID
-    userData.unix = unix
-    userData.token = this.jwtToken
+    const userData = { ...FAKE_USER_DATA };
+    const realUserID = deviceInfo.realUserID || deviceInfo.userId;
+    userData.uuid = realUserID;
+    userData.device_id = deviceInfo.deviceId || undefined;
+    userData.user_id = realUserID;
+    userData.unix = unix;
+    userData.token = this.jwtToken;
     
-    let queryStr = ''
+    let queryStr = '';
     for (const key in userData) {
-      if (userData[key] === undefined) continue
-      queryStr += `&${key}=${userData[key]}`
+      if (userData[key] === undefined) continue;
+      queryStr += `&${key}=${userData[key]}`;
     }
-    queryStr = queryStr.substring(1)
+    queryStr = queryStr.substring(1);
     
-    const dataJson = JSON.stringify(data || {})
-    const fullUri = `${uri}${uri.lastIndexOf('?') != -1 ? '&' : '?'}${queryStr}`
-    const yy = md5(`${encodeURIComponent(fullUri)}_${dataJson}${md5(unix)}ooui`)
-    const signature = md5(`${timestamp}${this.jwtToken}${dataJson}`)
+    const dataJson = JSON.stringify(data || {});
+    const fullUri = `${uri}${uri.lastIndexOf('?') != -1 ? '&' : '?'}${queryStr}`;
+    
+    let base = AGENT_BASE_URL;
+    if (uri.includes('/message')) {
+      base = 'https://agent-stream.minimaxi.com';
+    }
+    
+    const yy = md5(`${encodeURIComponent(fullUri)}_${dataJson}${md5(unix)}ooui`);
+    const signature = md5(`${timestamp}${this.jwtToken}${dataJson}`);
 
     return await axios.request({
       method,
-      url: `${AGENT_BASE_URL}${fullUri}`,
+      url: `${base}${fullUri}`,
       data,
-      timeout: 15000,
+      timeout: isStream ? 120000 : 15000,
+      responseType: isStream ? 'stream' : 'json',
       validateStatus: () => true,
       headers: {
         Referer: `${AGENT_BASE_URL}/`,
@@ -255,67 +263,7 @@ export class MiniMaxAdapter {
         'x-signature': signature,
         yy: yy,
       },
-    })
-  }
-
-  private async requestStream(
-    method: string,
-    uri: string,
-    requestBody: any,
-    deviceInfo: DeviceInfo
-  ): Promise<{ session: ClientHttp2Session; stream: ClientHttp2Stream }> {
-    const unix = `${Date.now()}`
-    const timestamp = unixTimestamp()
-
-    const userData = { ...FAKE_USER_DATA }
-    // Both uuid and user_id should use realUserID (matching reference implementation)
-    const realUserID = deviceInfo.realUserID || deviceInfo.userId
-    userData.uuid = realUserID
-    userData.device_id = deviceInfo.deviceId || undefined
-    userData.user_id = realUserID
-    userData.unix = unix
-    userData.token = this.jwtToken
-
-    let queryStr = ''
-    for (const key in userData) {
-      if (userData[key] === undefined) continue
-      queryStr += `&${key}=${userData[key]}`
-    }
-    queryStr = queryStr.substring(1)
-
-    const dataJson = JSON.stringify(requestBody)
-    const yy = md5(`${encodeURIComponent(`${uri}?${queryStr}`)}_${dataJson}${md5(unix)}ooui`)
-    const signature = md5(`${timestamp}${this.jwtToken}${dataJson}`)
-
-    const session = await new Promise<ClientHttp2Session>((resolve, reject) => {
-      const session = http2.connect(AGENT_BASE_URL)
-      session.on('connect', () => resolve(session))
-      session.on('error', reject)
-    })
-
-    // Use lowercase headers to match reference implementation
-    // Important: Accept header must be set after FAKE_HEADERS to override it
-    // Order matters: FAKE_HEADERS -> x-timestamp -> x-signature -> Accept -> yy
-    const headers: any = {
-      ':method': method,
-      ':path': `${uri}?${queryStr}`,
-      ':scheme': 'https',
-      'content-type': 'application/json',
-      Referer: 'https://agent.minimaxi.com/',
-      token: this.jwtToken,
-      ...FAKE_HEADERS,
-      'x-timestamp': `${timestamp}`,
-      'x-signature': signature,
-      Accept: 'text/event-stream', // Must be after FAKE_HEADERS to override
-      yy: yy,
-    }
-
-    const stream = session.request(headers)
-    stream.setTimeout(120000)
-    stream.setEncoding('utf8')
-    stream.end(Buffer.from(dataJson, 'utf8'))
-
-    return { session, stream }
+    });
   }
 
   private messagesPrepare(messages: MiniMaxMessage[], toolsPrompt?: string, isMultiTurn: boolean = false): any {
@@ -439,297 +387,166 @@ export class MiniMaxAdapter {
   }
 
   async chatCompletion(request: ChatCompletionRequest): Promise<{ response: AxiosResponse | null; stream: { session: ClientHttp2Session; stream: ClientHttp2Stream } | null; chatId: string }> {
-    this.model = request.model || 'MiniMax-M2.7'
-    this.created = unixTimestamp()
+    this.model = request.model || 'MiniMax-M3';
+    this.created = unixTimestamp();
     
-    const deviceInfo = await this.requestDeviceInfo()
+    const deviceInfo = await this.requestDeviceInfo();
+    const messages = [...request.messages];
     
-    const messages = [...request.messages]
-    
-    let toolsPrompt = ''
-    // Only inject if tools are provided and not already injected by client
+    let toolsPrompt = '';
     if (request.tools && request.tools.length > 0 && !hasToolPromptInjected(request.messages)) {
-      toolsPrompt = toolsToSystemPrompt(request.tools)
-      
-      // Find and update the last user message
+      toolsPrompt = toolsToSystemPrompt(request.tools);
       for (let i = messages.length - 1; i >= 0; i--) {
         if (messages[i].role === 'user') {
-          const currentContent = messages[i].content
+          const currentContent = messages[i].content;
           if (typeof currentContent === 'string') {
-            messages[i] = { ...messages[i], content: currentContent + TOOL_WRAP_HINT }
+            messages[i] = { ...messages[i], content: currentContent + TOOL_WRAP_HINT };
           }
-          break
+          break;
         }
       }
     }
     
-    const requestBody = this.messagesPrepare(messages, toolsPrompt, false)
+    const requestBodyTemp = this.messagesPrepare(messages, toolsPrompt, false);
+    const textContent = requestBodyTemp.text;
     
-    let msgId: string = ''
-    let chatId: string = request.chatId || ''
-    
-    if (chatId) {
-      const sendResponse = await this.request('POST', '/matrix/api/v1/chat/send_msg', {
-        ...requestBody,
-        chat_id: chatId,
-      }, deviceInfo)
-      
-      if (sendResponse.status !== 200) {
-        throw new Error(`MiniMax API error: HTTP ${sendResponse.status}`)
-      }
-      
-      const { msg_id, base_resp } = sendResponse.data
-      if (base_resp?.status_code !== 0) {
-        throw new Error(`Send message failed: ${base_resp?.status_msg || 'Unknown error'}`)
-      }
-      msgId = msg_id
-    } else {
-      const sendResponse = await this.request('POST', '/matrix/api/v1/chat/send_msg', requestBody, deviceInfo)
-      
-      if (sendResponse.status !== 200) {
-        throw new Error(`MiniMax API error: HTTP ${sendResponse.status} - ${JSON.stringify(sendResponse.data)}`)
-      }
-      
-      const result = sendResponse.data
-      const base_resp = result.base_resp
-      
-      if (base_resp?.status_code !== 0) {
-        throw new Error(`Send message failed: ${base_resp?.status_msg || 'Unknown error'}`)
-      }
-      
-      chatId = result.chat_id
-      msgId = result.msg_id
+    const agentRes = await this.request('GET', '/archon/api/v1/agent', {}, deviceInfo);
+    if (agentRes.status !== 200 || agentRes.data?.base_resp?.status_code !== 0) {
+      throw new Error('Failed to get MiniMax agent list');
     }
-    
-    if (request.stream === true) {
-      // Only delete chat in single-turn mode with deleteAfterChat enabled
-      // Import shouldDeleteSession from forwarder
-      const shouldDeleteSession = () => {
-        const config = (global as any).storeManager?.getConfig()
-        return config?.mode === 'single' && config?.deleteAfterTimeout
-      }
-      
-      const onEnd = shouldDeleteSession() ? async (chatId: string) => {
-        await this.deleteChat(chatId)
-      } : undefined
-      
-      const transStream = this.createPollingStream(chatId, deviceInfo, this.model, onEnd)
-      return { 
-        response: null, 
-        stream: { session: null as any, stream: transStream as any }, 
-        chatId 
-      }
+    const agents = agentRes.data?.agents || [];
+    const defaultAgent = agents.find((a: any) => a.agent_role === 'mavis') || agents[0];
+    if (!defaultAgent) {
+      throw new Error('No MiniMax agent found');
     }
+    const agentId = defaultAgent.name;
     
-    const aiMessage = await this.pollForResponse(chatId, deviceInfo)
-    
-    // Delete chat after response if in single-turn mode with deleteAfterChat enabled
-    const shouldDeleteSession = () => {
-      const config = (global as any).storeManager?.getConfig()
-      return config?.mode === 'single' && config?.deleteAfterTimeout
+    const sessionRes = await this.request('POST', `/archon/api/v1/agent/${agentId}/session`, { model: `minimax/${this.model}` }, deviceInfo);
+    if (sessionRes.status !== 200 || sessionRes.data?.base_resp?.status_code !== 0) {
+      throw new Error('Failed to create MiniMax session');
     }
+    const sessionId = sessionRes.data.session_id;
     
-    if (shouldDeleteSession()) {
-      await this.deleteChat(chatId).catch(err => console.error('[MiniMax] Failed to delete chat:', err))
-    }
-    
-    const content = aiMessage?.msg_content || ''
-    const thinkingContent = aiMessage?.extra_info?.thinking_content || ''
-    const { content: cleanContent, toolCalls } = parseToolCallsFromText(content, 'minimax')
-    
-    const response = {
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as any,
-      data: {
-        id: String(chatId),
-        model: this.model,
-        object: 'chat.completion',
-        choices: [{
-          index: 0,
-          message: {
-            role: 'assistant',
-            content: toolCalls.length > 0 ? null : cleanContent,
-            ...(thinkingContent ? { reasoning_content: thinkingContent } : {}),
-            ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {})
-          },
-          finish_reason: toolCalls.length > 0 ? 'tool_calls' : 'stop',
-        }],
-        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-        created: this.created,
+    const turnId = uuid();
+    const payload = {
+      content: textContent,
+      model: {
+        provider_id: 'minimax',
+        model_id: this.model,
+        variant: this.model.toLowerCase().includes('thinking') || this.model.toLowerCase().includes('m3') ? 'thinking' : ''
       },
-    }
+      turn_id: turnId,
+      enable_team: true,
+      worktreeMode: false
+    };
     
-    return { response, stream: null, chatId }
-  }
-
-  private async pollForResponse(chatId: string, deviceInfo: DeviceInfo, maxPolls = 120, pollInterval = 1000): Promise<any> {
-    let pollCount = 0
-    
-    while (pollCount < maxPolls) {
-      await new Promise(resolve => setTimeout(resolve, pollInterval))
-      pollCount++
+    if (request.stream) {
+      const msgRes = await this.request('POST', `/archon/api/v1/session/${sessionId}/message`, payload, deviceInfo, true);
+      const transStream = new PassThrough();
       
-      const detailResponse = await this.request('POST', '/matrix/api/v1/chat/get_chat_detail', { chat_id: chatId }, deviceInfo)
+      transStream.write(`data: ${JSON.stringify({
+        id: sessionId,
+        model: this.model,
+        object: 'chat.completion.chunk',
+        choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }],
+        created: this.created,
+      })}\n\n`);
       
-      if (detailResponse.status !== 200) {
-        continue
-      }
-      
-      const { messages, base_resp } = detailResponse.data
-      
-      if (base_resp?.status_code !== 0) {
-        continue
-      }
-      
-      // Find AI response (msg_type === 2)
-      const aiMessage = messages?.find((msg: any) => msg.msg_type === 2)
-      
-      if (aiMessage && aiMessage.msg_content) {
-        return aiMessage
-      }
-    }
-    
-    throw new Error(`No AI response after ${maxPolls} polls`)
-  }
-
-  private createPollingStream(chatId: string, deviceInfo: DeviceInfo, model: string, onEnd?: (chatId: string) => Promise<void>): PassThrough {
-    const transStream = new PassThrough()
-    const created = this.created
-    let lastContent = ''
-    let lastThinkingContent = ''
-    let pollCount = 0
-    const maxPolls = 120
-    const pollInterval = 500
-    const toolCallState = createToolCallState()
-    let sentRole = false
-    let sentThinkingRole = false
-    let lastMsgId = ''
-    
-    const poll = async () => {
-      try {
-        while (pollCount < maxPolls) {
-          await new Promise(resolve => setTimeout(resolve, pollInterval))
-          pollCount++
-          
-          const detailResponse = await this.request('POST', '/matrix/api/v1/chat/get_chat_detail', { chat_id: chatId }, deviceInfo)
-          
-          if (detailResponse.status !== 200) {
-            continue
-          }
-          
-          const { messages, chat, base_resp } = detailResponse.data
-          if (base_resp?.status_code !== 0) {
-            continue
-          }
-          
-          const chatStatus = chat?.chat_status || 0
-          
-          const aiMessages = messages?.filter((msg: any) => msg.msg_type === 2)
-          const aiMessage = aiMessages?.length > 0 ? aiMessages[aiMessages.length - 1] : null
-          
-          if (aiMessage && aiMessage.msg_content) {
-            const currentContent = aiMessage.msg_content
-            const currentThinkingContent = aiMessage?.extra_info?.thinking_content || ''
-            const currentMsgId = aiMessage.msg_id || ''
-            
-            if (currentMsgId !== lastMsgId && lastMsgId !== '') {
-              lastContent = ''
-              lastThinkingContent = ''
-            }
-            
-            if (currentThinkingContent && currentThinkingContent.length > lastThinkingContent.length) {
-              const newThinkingChunk = currentThinkingContent.substring(lastThinkingContent.length)
-              
-              if (newThinkingChunk.trim()) {
-                if (!sentThinkingRole) {
-                  transStream.write(`data: ${JSON.stringify({
-                    id: chatId.toString(),
-                    model,
-                    object: 'chat.completion.chunk',
-                    choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }],
-                    created,
-                  })}\n\n`)
-                  sentThinkingRole = true
-                }
-                
-                transStream.write(`data: ${JSON.stringify({
-                  id: chatId.toString(),
-                  model,
-                  object: 'chat.completion.chunk',
-                  choices: [{ index: 0, delta: { reasoning_content: newThinkingChunk }, finish_reason: null }],
-                  created,
-                })}\n\n`)
-              }
-              
-              lastThinkingContent = currentThinkingContent
-            }
-            
-            if (currentContent.length > lastContent.length) {
-              const newChunk = currentContent.substring(lastContent.length)
-              
-              const baseChunk = createBaseChunk(chatId.toString(), model, created)
-              const { chunks: outputChunks } = processStreamContent(
-                newChunk, 
-                toolCallState, 
-                baseChunk, 
-                !sentRole,
-                'minimax'
-              )
-
-              for (const outChunk of outputChunks) {
-                transStream.write(`data: ${JSON.stringify(outChunk)}\n\n`)
-              }
-
-              if (outputChunks.length > 0) sentRole = true
-              
-              lastContent = currentContent
-            }
-            
-            lastMsgId = currentMsgId
-            
-            if (chatStatus === 2 && aiMessage.msg_content) {
-              const baseChunk = createBaseChunk(chatId.toString(), model, created)
-              const flushChunks = flushToolCallBuffer(toolCallState, baseChunk, 'minimax')
-              
-              for (const outChunk of flushChunks) {
-                transStream.write(`data: ${JSON.stringify(outChunk)}\n\n`)
-              }
-              
-              const finishReason = toolCallState.hasEmittedToolCall ? 'tool_calls' : 'stop'
-              
-              transStream.write(
-                `data: ${JSON.stringify({
-                  id: chatId.toString(),
-                  model,
-                  object: 'chat.completion.chunk',
-                  choices: [{ index: 0, delta: {}, finish_reason: finishReason }],
-                  created,
-                })}\n\n`
-              )
-              transStream.end('data: [DONE]\n\n')
-              if (onEnd) {
-                onEnd(chatId).catch(err => console.error('[MiniMax] Failed to delete chat:', err))
-              }
-              return
-            }
-            
-            lastMsgId = currentMsgId
-          }
+      const parser = createParser({
+        onEvent: (event: EventSourceMessage) => {
+        if (event.data === '[DONE]') {
+          transStream.write(`data: ${JSON.stringify({
+            id: sessionId,
+            model: this.model,
+            object: 'chat.completion.chunk',
+            choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+            created: this.created,
+          })}\n\n`);
+          transStream.end('data: [DONE]\n\n');
+          return;
         }
-        
-        transStream.end('data: [DONE]\n\n')
-      } catch (err) {
-        console.error('[MiniMax] Polling error:', err)
-        transStream.end('data: [DONE]\n\n')
-      }
+        try {
+          const parsed = JSON.parse(event.data);
+          if (parsed.type === 6 && parsed.agent_message_chunk) {
+             const chunk = parsed.agent_message_chunk;
+             if (chunk.thinking_content) {
+               transStream.write(`data: ${JSON.stringify({
+                 id: sessionId,
+                 model: this.model,
+                 object: 'chat.completion.chunk',
+                 choices: [{ index: 0, delta: { reasoning_content: chunk.thinking_content }, finish_reason: null }],
+                 created: this.created,
+               })}\n\n`);
+             }
+             if (chunk.content) {
+               transStream.write(`data: ${JSON.stringify({
+                 id: sessionId,
+                 model: this.model,
+                 object: 'chat.completion.chunk',
+                 choices: [{ index: 0, delta: { content: chunk.content }, finish_reason: null }],
+                 created: this.created,
+               })}\n\n`);
+             }
+          }
+        } catch(e) {}
+        }
+      });
+      
+      msgRes.data.on('data', (chunk: Buffer) => parser.feed(chunk.toString('utf8')));
+      msgRes.data.on('end', () => transStream.end('data: [DONE]\n\n'));
+      
+      return { response: null, stream: { session: null as any, stream: transStream as any }, chatId: sessionId };
+    } else {
+      const msgRes = await this.request('POST', `/archon/api/v1/session/${sessionId}/message`, payload, deviceInfo, true);
+      let fullContent = '';
+      let fullThinking = '';
+      
+      const parser = createParser({
+        onEvent: (event: EventSourceMessage) => {
+        if (event.data === '[DONE]') return;
+        try {
+          const parsed = JSON.parse(event.data);
+          if (parsed.type === 6 && parsed.agent_message_chunk) {
+             const chunk = parsed.agent_message_chunk;
+             if (chunk.thinking_content) fullThinking += chunk.thinking_content;
+             if (chunk.content) fullContent += chunk.content;
+          }
+        } catch(e) {}
+        }
+      });
+      
+      await new Promise<void>((resolve, reject) => {
+        msgRes.data.on('data', (chunk: Buffer) => parser.feed(chunk.toString('utf8')));
+        msgRes.data.on('end', () => resolve());
+        msgRes.data.on('error', reject);
+      });
+      
+      const response = {
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+        data: {
+          id: sessionId,
+          model: this.model,
+          object: 'chat.completion',
+          choices: [{
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: fullContent,
+              ...(fullThinking ? { reasoning_content: fullThinking } : {})
+            },
+            finish_reason: 'stop',
+          }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          created: this.created,
+        },
+      };
+      return { response, stream: null, chatId: sessionId };
     }
-    
-    poll()
-    
-    return transStream
   }
+
 
   async deleteChat(chatId: string): Promise<boolean> {
     const maxRetries = 3
