@@ -208,4 +208,50 @@ export const MANUAL_TOKEN_CONFIGS: Partial<Record<ProviderType, ManualTokenConfi
       helpUrl: 'https://www.perplexity.ai',
     },
   ],
+  chatgpt: [
+    {
+      providerType: 'chatgpt',
+      tokenType: 'access',
+      label: 'Access Token',
+      placeholder: 'OAuth access token from ~/.codex/auth.json',
+      description: 'OAuth2 PKCE access token issued by auth.openai.com for Codex CLI. Obtain via `npx @openai/codex login` or the openai-oauth flow.',
+      helpUrl: 'https://chatgpt.com',
+    },
+    {
+      providerType: 'chatgpt',
+      tokenType: 'refresh',
+      label: 'Refresh Token',
+      placeholder: 'OAuth refresh token (enables auto-renewal)',
+      description: 'OAuth refresh token from ~/.codex/auth.json. Recommended so the adapter can refresh the access token automatically.',
+      helpUrl: 'https://auth.openai.com',
+    },
+  ],
+  gemini: [
+    {
+      providerType: 'gemini',
+      tokenType: 'cookie',
+      label: 'Cookies',
+      placeholder: '__Secure-1PSID=...; __Secure-1PSIDTS=...',
+      description: 'Cookies from gemini.google.com DevTools. __Secure-1PSID and __Secure-1PSIDTS are required; SID/HSID/SSID/APISID/SAPISID are needed for Pro-tier models.',
+      helpUrl: 'https://gemini.google.com',
+    },
+  ],
+  grok: [
+    {
+      providerType: 'grok',
+      tokenType: 'cookie',
+      label: 'SSO Cookies',
+      placeholder: 'sso=...; sso-rw=...',
+      description: 'Cookies from grok.com DevTools. `sso` is the primary SSO token; `sso-rw` is the read-write variant. Anonymous mode: x-anonuserid + x-challenge + x-signature.',
+      helpUrl: 'https://grok.com',
+    },
+    {
+      providerType: 'grok',
+      tokenType: 'token',
+      label: 'x-statsig-id (optional)',
+      placeholder: 'Encrypted Statsig SDK token',
+      description: 'Optional but recommended. The x-statsig-id header is an encrypted token produced by the in-page Statsig SDK; capture it from DevTools Network tab on grok.com.',
+      helpUrl: 'https://grok.com',
+    },
+  ],
 }

@@ -123,6 +123,42 @@ export const PROVIDER_TOKEN_SPECS: Record<ProviderType, ProviderTokenSpec> = {
     originLabel: 'Perplexity',
     expectedOrigin: 'https://www.perplexity.ai',
   },
+  chatgpt: {
+    // ChatGPT's Codex CLI stores OAuth tokens in localStorage under
+    // `access_token` / `refresh_token`. On chatgpt.com itself there is no
+    // single cookie that maps cleanly, so the bookmarklet reads the
+    // localStorage payload that the Codex CLI / openai-oauth flow writes.
+    storageType: 'localStorage',
+    tokenKey: 'access_token',
+    tokenField: 'token',
+    extras: [
+      { sourceKey: 'refresh_token', field: 'refreshToken', required: false },
+    ],
+    originLabel: 'ChatGPT',
+    expectedOrigin: 'https://chatgpt.com',
+  },
+  gemini: {
+    // Gemini web uses cookie-based auth. The bookmarklet collects the
+    // full cookie jar via document.cookie; the primary markers are the
+    // __Secure-1PSID / __Secure-1PSIDTS cookies.
+    storageType: 'cookie',
+    tokenKey: '__Secure-1PSID',
+    tokenField: 'cookie',
+    originLabel: 'Gemini',
+    expectedOrigin: 'https://gemini.google.com',
+  },
+  grok: {
+    // Grok web uses SSO cookies (`sso` / `sso-rw`). The bookmarklet
+    // gathers the whole cookie string and the adapter splits it out.
+    storageType: 'cookie',
+    tokenKey: 'sso',
+    tokenField: 'cookie',
+    extras: [
+      { sourceKey: 'sso-rw', field: 'ssoRw', required: false },
+    ],
+    originLabel: 'Grok',
+    expectedOrigin: 'https://grok.com',
+  },
 }
 
 export function getTokenSpec(providerType: ProviderType): ProviderTokenSpec | undefined {

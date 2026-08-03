@@ -5,16 +5,16 @@ export type ProviderStatus = 'online' | 'offline' | 'unknown'
 export type ProviderType = 'builtin' | 'custom'
 
 // Provider vendor type (for OAuth adapters)
-export type ProviderVendor = 'deepseek' | 'glm' | 'kimi' | 'mimo' | 'minimax' | 'qwen' | 'qwen-ai' | 'zai' | 'perplexity' | 'custom'
+export type ProviderVendor = 'deepseek' | 'glm' | 'kimi' | 'mimo' | 'minimax' | 'qwen' | 'qwen-ai' | 'zai' | 'perplexity' | 'chatgpt' | 'gemini' | 'grok' | 'custom'
 
-export type AuthType = 
-  | 'oauth' 
-  | 'token' 
-  | 'cookie' 
-  | 'userToken' 
-  | 'refresh_token' 
-  | 'jwt' 
-  | 'realUserID_token' 
+export type AuthType =
+  | 'oauth'
+  | 'token'
+  | 'cookie'
+  | 'userToken'
+  | 'refresh_token'
+  | 'jwt'
+  | 'realUserID_token'
   | 'tongyi_sso_ticket'
 
 export interface CredentialField {

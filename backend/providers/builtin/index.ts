@@ -7,6 +7,9 @@ import perplexityConfig from './perplexity'
 import qwenConfig from './qwen'
 import qwenAiConfig from './qwen-ai'
 import zaiConfig from './zai'
+import chatgptConfig from './chatgpt'
+import geminiConfig from './gemini'
+import grokConfig from './grok'
 import type { BuiltinProviderConfig } from '../../store/types'
 
 export const builtinProviders: BuiltinProviderConfig[] = [
@@ -19,6 +22,9 @@ export const builtinProviders: BuiltinProviderConfig[] = [
   qwenConfig,
   qwenAiConfig,
   zaiConfig,
+  chatgptConfig,
+  geminiConfig,
+  grokConfig,
 ]
 
 export const builtinProviderMap: Record<string, BuiltinProviderConfig> = {
@@ -31,6 +37,9 @@ export const builtinProviderMap: Record<string, BuiltinProviderConfig> = {
   qwen: qwenConfig,
   'qwen-ai': qwenAiConfig,
   zai: zaiConfig,
+  chatgpt: chatgptConfig,
+  gemini: geminiConfig,
+  grok: grokConfig,
 }
 
 export function getBuiltinProvider(id: string): BuiltinProviderConfig | undefined {
@@ -51,6 +60,9 @@ export {
   qwenConfig,
   qwenAiConfig,
   zaiConfig,
+  chatgptConfig,
+  geminiConfig,
+  grokConfig,
 }
 
 export default builtinProviders

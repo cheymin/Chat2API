@@ -28,14 +28,14 @@ export type ProviderType = 'builtin' | 'custom'
  * - realUserID_token: realUserID+JWT authentication (MiniMax)
  * - tongyi_sso_ticket: Tongyi SSO ticket authentication (Qwen)
  */
-export type AuthType = 
-  | 'oauth' 
-  | 'token' 
-  | 'cookie' 
-  | 'userToken' 
-  | 'refresh_token' 
-  | 'jwt' 
-  | 'realUserID_token' 
+export type AuthType =
+  | 'oauth'
+  | 'token'
+  | 'cookie'
+  | 'userToken'
+  | 'refresh_token'
+  | 'jwt'
+  | 'realUserID_token'
   | 'tongyi_sso_ticket'
 
 /**
