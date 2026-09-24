@@ -37,19 +37,22 @@ const FAKE_HEADERS = {
   Origin: 'https://chatglm.cn',
   Pragma: 'no-cache',
   Priority: 'u=1, i',
-  'Sec-Ch-Ua': '"Microsoft Edge";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+  // Updated to Chrome 152 / Edge 152 fingerprint (HAR 2026-09-05)
+  'Sec-Ch-Ua': '"Chromium";v="152", "Not?A_Brand";v="24", "Microsoft Edge";v="152"',
   'Sec-Ch-Ua-Mobile': '?0',
   'Sec-Ch-Ua-Platform': '"Windows"',
   'Sec-Fetch-Dest': 'empty',
   'Sec-Fetch-Mode': 'cors',
   'Sec-Fetch-Site': 'same-origin',
-  'X-App-Fr': 'browser_extension',
+  // x-app-fr changed from 'browser_extension' to 'default' (HAR 2026-09-05)
+  'X-App-Fr': 'default',
   'X-App-Platform': 'pc',
   'X-App-Version': '0.0.1',
   'X-Device-Brand': '',
   'X-Device-Model': '',
   'X-Lang': 'zh',
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0',
+  // Updated UA to Chrome/152 Edge/152 (HAR 2026-09-05)
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36 Edg/152.0.0.0',
 }
 
 interface TokenInfo {
@@ -72,7 +75,7 @@ interface ChatCompletionRequest {
   stream?: boolean
   temperature?: number
   web_search?: boolean
-  reasoning_effort?: 'low' | 'medium' | 'high'
+  reasoning_effort?: 'low' | 'medium' | 'high' | 'max' | 'deep'
   deep_research?: boolean
   tools?: any[]
   tool_choice?: any
@@ -496,10 +499,16 @@ GLM STRICT RULES:
     let chatMode = ''
     let isNetworking = false
 
-    // Use request parameters for mode control (OpenAI compatible)
-    if (request.reasoning_effort) {
-      chatMode = 'zero'
-      console.log('[GLM] Using reasoning mode, effort:', request.reasoning_effort)
+    // Use request parameters for mode control (OpenAI compatible).
+    // HAR 2026-09-05 confirms: high -> thinking; max -> deep_thinking.
+    if (request.reasoning_effort === 'high') {
+      chatMode = 'thinking'
+      console.log('[GLM] Using thinking mode (deep reasoning)')
+    } else if (request.reasoning_effort === 'max' || request.reasoning_effort === 'deep') {
+      chatMode = 'deep_thinking'
+      console.log('[GLM] Using deep_thinking mode (max reasoning)')
+    } else if (request.reasoning_effort) {
+      console.log('[GLM] Using fast mode, effort:', request.reasoning_effort)
     }
     
     if (request.web_search) {
@@ -508,23 +517,35 @@ GLM STRICT RULES:
     }
     
     if (request.deep_research) {
-      chatMode = 'deep_research'
-      console.log('[GLM] Using deep research mode')
+      chatMode = 'deep_thinking'
+      console.log('[GLM] Using deep_thinking mode (from deep_research flag)')
     }
 
-    // Fallback: check model name for backward compatibility
-    // Use originalModel for feature detection (preserves user's intent before mapping)
+    // Use originalModel for feature detection (preserves intent before mapping).
     const modelForDetection = request.originalModel || request.model
     const modelLower = modelForDetection.toLowerCase()
-    if (!chatMode && (modelLower.includes('think') || modelLower.includes('zero'))) {
-      chatMode = 'zero'
-      console.log('[GLM] Using reasoning mode (from model name)')
-    }
-    if (!chatMode && modelLower.includes('deepresearch')) {
-      chatMode = 'deep_research'
-      console.log('[GLM] Using deep research mode (from model name)')
+
+    // Check deep-thinking before generic "think", otherwise "deep-think" is
+    // incorrectly downgraded to the regular thinking mode.
+    if (!chatMode && (modelLower.includes('deepthink') || modelLower.includes('deep_think') || modelLower.includes('deepresearch'))) {
+      chatMode = 'deep_thinking'
+      console.log('[GLM] Using deep_thinking mode (from model name)')
+    } else if (!chatMode && (modelLower.includes('think') || modelLower.includes('zero'))) {
+      chatMode = 'thinking'
+      console.log('[GLM] Using thinking mode (from model name)')
     }
     
+    // Resolve the current web client selected_model value from the requested
+    // public model alias. HAR: GLM-5.3 -> glm-5.3; GLM-Flash -> glm-5.3-flash.
+    let selectedModel = 'glm-5.3-flash'
+    if (modelLower.includes('glm-flash') || modelLower.includes('5.3-flash')) {
+      selectedModel = 'glm-5.3-flash'
+    } else if (modelLower.includes('glm-5.3') || modelLower.includes('5.3')) {
+      selectedModel = 'glm-5.3'
+    } else if (modelLower.includes('glm-5.2') || modelLower.includes('5.2')) {
+      selectedModel = 'glm-5.2'
+    }
+
     // Check if model is an assistant ID (24+ alphanumeric characters)
     if (/^[a-z0-9]{24,}$/.test(request.model)) {
       assistantId = request.model
@@ -542,13 +563,14 @@ GLM STRICT RULES:
         messages: preparedMessages,
         meta_data: {
           channel: '',
-          chat_mode: chatMode || undefined,
+          chat_mode: chatMode || 'thinking',
           draft_id: '',
-          if_plus_model: true,
           input_question_type: 'xxxx',
           is_networking: isNetworking,
           is_test: false,
           platform: 'pc',
+          // selected_model: new field added in HAR 2026-09-05
+          selected_model: selectedModel,
           quote_log_id: '',
           cogview: {
             rm_label_watermark: false,
@@ -575,14 +597,18 @@ GLM STRICT RULES:
   }
 
   async deleteConversation(conversationId: string): Promise<boolean> {
+    if (!conversationId) {
+      return false
+    }
+
     try {
       const token = await this.acquireToken()
       const sign = generateSign()
-      await axios.post(
-        `${GLM_API_BASE}/backend-api/assistant/conversation/delete`,
+      const response = await axios.post(
+        `${GLM_API_BASE}/mainchat-api/conversation/bulk_delete`,
         {
+          conversation_ids: [conversationId],
           assistant_id: DEFAULT_ASSISTANT_ID,
-          conversation_id: conversationId,
         },
         {
           headers: {
@@ -599,8 +625,18 @@ GLM STRICT RULES:
           validateStatus: () => true,
         }
       )
-      console.log('[GLM] Conversation deleted:', conversationId)
-      return true
+
+      const success = response.status === 200 && response.data?.status === 0
+      if (success) {
+        console.log('[GLM] Conversation deleted:', conversationId)
+      } else {
+        console.error('[GLM] Failed to delete conversation:', {
+          conversationId,
+          httpStatus: response.status,
+          response: response.data,
+        })
+      }
+      return success
     } catch (error) {
       console.error('[GLM] Failed to delete conversation:', error)
       return false

@@ -253,6 +253,7 @@
       "deepseek-v4-flash-think": "DeepSeek V4 Flash - Think",
       "deepseek-v4-flash-search": "DeepSeek V4 Flash - Search",
       "deepseek-v4-flash-think-search": "DeepSeek V4 Flash - Think+Search",
+      "deepseek-vision": "DeepSeek Vision - Vision Mode",
       "deepseek-chat": "DeepSeek Chat (legacy)",
       "deepseek-reasoner": "DeepSeek Reasoner (legacy)",
       "DeepSeek-V3.2": "DeepSeek V3.2 - Standard Chat",
@@ -272,8 +273,8 @@
     "name": "Kimi",
     "description": "Kimi AI assistant, supports long text processing and web search",
     "accessToken": "Access Token",
-    "accessTokenPlaceholder": "Enter Kimi Access Token or Refresh Token",
-    "accessTokenHelp": "The kimi-auth value from browser cookies (recommended), or JWT Token / refresh_token"
+    "accessTokenPlaceholder": "Enter Kimi Access Token (starts with eyJ)",
+    "accessTokenHelp": "Only Kimi JWT access tokens obtained from the browser are supported. refresh_token is currently unsupported; do not enter it."
   },
   "minimax": {
     "name": "MiniMax",

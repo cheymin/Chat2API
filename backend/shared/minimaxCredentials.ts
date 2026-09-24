@@ -36,9 +36,9 @@ function extractRealUserIdFromAgentJson(value: string): string {
 
 export function resolveMiniMaxCredentials(
   credentials: Record<string, string | undefined> | null | undefined,
-): { jwtToken: string; realUserID: string; error?: string } {
+): { jwtToken: string; realUserID: string; uetsid: string; error?: string } {
   if (!credentials || typeof credentials !== 'object') {
-    return { jwtToken: '', realUserID: '', error: '缺少凭证数据' }
+    return { jwtToken: '', realUserID: '', uetsid: '', error: '缺少凭证数据' }
   }
 
   let rawToken = (
@@ -47,6 +47,7 @@ export function resolveMiniMaxCredentials(
     credentials.jwt ||
     ''
   ).trim()
+  const uetsid = (credentials._uetsid || credentials.uetsid || '').trim()
   let providedRealUserID = (
     credentials.realUserID ||
     credentials._userId ||
@@ -86,6 +87,7 @@ export function resolveMiniMaxCredentials(
     return {
       jwtToken: '',
       realUserID: '',
+      uetsid: '',
       error: '请填写 JWT Token（Local Storage / Cookie 中的 _token，以 eyJ 开头）',
     }
   }
@@ -109,16 +111,22 @@ export function resolveMiniMaxCredentials(
     return {
       jwtToken: '',
       realUserID: '',
+      uetsid: '',
       error: 'Token 格式不正确，请使用 _token 中的 JWT（以 eyJ 开头）',
     }
+  }
+
+  if (!realUserID) {
+    realUserID = parseJwtUserId(jwtToken)
   }
 
   if (!realUserID) {
     return {
       jwtToken,
       realUserID: '',
+      uetsid,
       error:
-        'MiniMax 新版必须填写 Real User ID：打开 Local Storage 的 user_detail_agent，复制其中 realUserID。不要用 UNIQUE_USER_ID，也不要只依赖 JWT 里的 user.id。',
+        '无法从 JWT 自动识别用户 ID。请填写 Real User ID，或从 Local Storage 的 user_detail_agent 中复制 realUserID。',
     }
   }
 
@@ -127,10 +135,11 @@ export function resolveMiniMaxCredentials(
     return {
       jwtToken,
       realUserID: '',
+      uetsid,
       error:
         'Real User ID 填错了：当前值是 UNIQUE_USER_ID。请打开 Local Storage → user_detail_agent，复制 JSON 里的 realUserID（例如 441972700348235778 这种数字串）。',
     }
   }
 
-  return { jwtToken, realUserID }
+  return { jwtToken, realUserID, uetsid }
 }

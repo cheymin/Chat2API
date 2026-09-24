@@ -1,11 +1,11 @@
 import { PassThrough } from 'stream'
 import { parseToolCallsFromText } from '../utils/toolParser'
-import { 
-  createToolCallState, 
-  processStreamContent, 
+import {
+  createToolCallState,
+  processStreamContent,
   flushToolCallBuffer,
   createBaseChunk,
-  ToolCallState 
+  ToolCallState
 } from '../utils/streamToolHandler'
 import type { PerplexityAdapter } from './perplexity'
 
@@ -98,7 +98,7 @@ export class PerplexityStreamHandler {
     if (errorMsg.includes('ERR_NETWORK_CHANGED') || errorMsg.includes('net::ERR_NETWORK_CHANGED')) {
       return 'Network changed during streaming. Please try again.'
     }
-    
+
     return `Stream error: ${errorMsg}`
   }
 
@@ -223,7 +223,7 @@ export class PerplexityStreamHandler {
 
     for (const patch of block.diff_block.patches) {
       const path = patch.path || ''
-      
+
       if (path === '/progress') continue
 
       let value = patch.value
@@ -269,7 +269,7 @@ export class PerplexityStreamHandler {
     this.accumulatedReasoning += content
 
     const delta: { role?: string; reasoning_content?: string } = {}
-    
+
     if (this.isFirstChunk) {
       delta.role = 'assistant'
       this.isFirstChunk = false
@@ -317,7 +317,7 @@ export class PerplexityStreamHandler {
     }
 
     const delta: { role?: string; content?: string } = {}
-    
+
     if (this.isFirstChunk) {
       delta.role = 'assistant'
       this.isFirstChunk = false
@@ -340,7 +340,7 @@ export class PerplexityStreamHandler {
         .sort((a, b) => a.cite_index - b.cite_index)
         .map(r => `[${r.cite_index}]: [${r.title}](${r.url})`)
         .join('\n')
-      
+
       if (citations) {
         transStream.write(this.createChunk({ content: `\n\n${citations}` }))
       }
@@ -351,7 +351,7 @@ export class PerplexityStreamHandler {
     transStream.write(this.createChunk({}, finishReason))
     transStream.write('data: [DONE]\n\n')
     transStream.end()
-    
+
     this.onEnd?.()
   }
 
@@ -391,11 +391,11 @@ export class PerplexityStreamHandler {
         const message: any = {
           role: 'assistant',
         }
-        
+
         if (this.accumulatedReasoning) {
           message.reasoning_content = filterCitations(this.accumulatedReasoning.trim())
         }
-        
+
         message.content = toolCalls.length > 0 ? null : cleanContent.trim()
 
         if (toolCalls.length > 0) {
@@ -466,7 +466,7 @@ export class PerplexityStreamHandler {
 
     for (const patch of block.diff_block.patches) {
       const path = patch.path || ''
-      
+
       if (path === '/progress') continue
 
       let value = patch.value
@@ -502,7 +502,7 @@ export class PerplexityStreamHandler {
         } else if (this.accumulatedContent.endsWith(value)) {
           continue
         }
-        
+
         if (value) {
           this.accumulatedContent += value
         }

@@ -341,23 +341,26 @@ export class MimoAdapter {
   }
 
   private buildHeaders(serviceToken: string, userId: string, phToken: string): Record<string, string> {
+    // Normalize phToken: strip surrounding quotes if present, then wrap in quotes as required by the latest API
+    const rawPh = phToken.replace(/^"|"$/g, '')
+    const rawToken = serviceToken.replace(/^"|"$/g, '')
     return {
       'Content-Type': 'application/json',
-      Cookie: `serviceToken=${serviceToken}; userId=${userId}; xiaomichatbot_ph=${phToken}`,
+      Cookie: `xiaomichatbot_serviceToken="${rawToken}"; userId=${userId}; xiaomichatbot_ph="${rawPh}"`,
       Origin: MIMO_API_BASE,
       Referer: `${MIMO_API_BASE}/`,
       'X-Timezone': 'Asia/Shanghai',
       Accept: '*/*',
       'Accept-Encoding': 'gzip, deflate, br, zstd',
-      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-      'Cache-Control': 'no-cache',
-      Pragma: 'no-cache',
-      'Sec-Ch-Ua': '"Chromium";v="144", "Not(A:Brand";v="8", "Google Chrome";v="144"',
+      'Accept-Language': 'system',
+      'Sec-Ch-Ua': '"Chromium";v="152", "Not?A_Brand";v="24", "Google Chrome";v="152"',
       'Sec-Ch-Ua-Mobile': '?0',
       'Sec-Ch-Ua-Platform': '"Windows"',
       'Sec-Fetch-Dest': 'empty',
       'Sec-Fetch-Mode': 'cors',
       'Sec-Fetch-Site': 'same-origin',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
+      Priority: 'u=1, i',
     }
   }
 
@@ -430,6 +433,7 @@ export class MimoAdapter {
     const conversationId = uuid(false)
     const msgId = uuid(false).slice(0, 32)
     const query = buildMimoQuery(request.messages)
+    // Create conversation before chatting
     await this.saveConversation(conversationId)
 
     const modelLower = request.model.toLowerCase()
@@ -438,6 +442,7 @@ export class MimoAdapter {
       enableThinking = true
     }
 
+    const temperature = request.temperature ?? 0.8
     const requestBody = {
       msgId,
       conversationId,
@@ -447,6 +452,8 @@ export class MimoAdapter {
         enableThinking,
         webSearchStatus: 'disabled',
         model: request.model.toLowerCase(),
+        temperature,
+        topP: 0.95,
       },
       multiMedias: [],
     }
@@ -483,12 +490,7 @@ export class MimoAdapter {
         },
       },
       {
-        headers: {
-          'Content-Type': 'application/json',
-          Cookie: `serviceToken=${serviceToken}; userId=${userId}; xiaomichatbot_ph=${phToken}`,
-          Origin: MIMO_API_BASE,
-          Referer: `${MIMO_API_BASE}/`,
-        },
+        headers: this.buildHeaders(serviceToken, userId, phToken),
         timeout: 30000,
         validateStatus: () => true,
       }
@@ -527,12 +529,7 @@ export class MimoAdapter {
       url,
       conversationIds,
       {
-        headers: {
-          'Content-Type': 'application/json',
-          Cookie: `serviceToken=${serviceToken}; userId=${userId}; xiaomichatbot_ph=${phToken}`,
-          Origin: MIMO_API_BASE,
-          Referer: `${MIMO_API_BASE}/`,
-        },
+        headers: this.buildHeaders(serviceToken, userId, phToken),
         timeout: 60000,
         validateStatus: () => true,
       }

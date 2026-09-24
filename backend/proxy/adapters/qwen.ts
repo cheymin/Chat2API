@@ -7,7 +7,7 @@
 import axios, { AxiosResponse } from 'axios'
 import { PassThrough } from 'stream'
 import { createGunzip, createInflate, createBrotliDecompress } from 'zlib'
-import * as ZstdCodec from 'zstd-codec'
+import { ZstdCodec } from 'zstd-codec'
 import { createParser } from 'eventsource-parser'
 import { Account, Provider } from '../../store/types'
 import { hasToolUse, parseToolUse, ToolCall } from '../promptToolUse'
@@ -40,18 +40,19 @@ const MODEL_MAP: Record<string, string> = {
 
 const DEFAULT_HEADERS = {
   Accept: 'application/json, text/event-stream, text/plain, */*',
-  'Accept-Language': 'zh-CN,zh;q=0.9',
-  'Cache-Control': 'no-cache',
+  'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
+  'Cache-Control': 'max-age=0',
   Origin: 'https://www.qianwen.com',
-  Pragma: 'no-cache',
-  'Sec-Ch-Ua': '"Chromium";v="145", "Not(A:Brand";v="24", "Google Chrome";v="145"',
+  'Sec-Ch-Ua': '"Microsoft Edge";v="153", "Not_A Brand";v="8", "Chromium";v="153"',
   'Sec-Ch-Ua-Mobile': '?0',
-  'Sec-Ch-Ua-Platform': '"macOS"',
+  'Sec-Ch-Ua-Platform': '"Windows"',
   'Sec-Fetch-Dest': 'empty',
   'Sec-Fetch-Mode': 'cors',
   'Sec-Fetch-Site': 'same-site',
   Referer: 'https://www.qianwen.com/',
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36 Edg/153.0.0.0',
+  'Priority': 'u=1, i',
+  'prod_id': 'tongyi',
 }
 
 interface QwenMessage {
@@ -137,28 +138,35 @@ export class QwenAdapter {
     return model
   }
 
-  private getApiHeaders(ticket: string): Record<string, string> {
+  private getDeviceId(): string {
+    return this.account.credentials.deviceId || this.account.credentials.ut || '78d8be35-06c6-8c4d-d03c-47a4552aab98'
+  }
+
+  private getApiHeaders(ticket: string, extra: Record<string, string> = {}): Record<string, string> {
     return {
       Cookie: `tongyi_sso_ticket=${ticket}`,
       ...DEFAULT_HEADERS,
       'Content-Type': 'application/json',
       'X-Platform': 'pc_tongyi',
-      'X-DeviceId': '5b68c267-cd8e-fd0e-148a-18345bc9a104',
+      'x-device-id': this.getDeviceId(),
+      ...extra,
     }
   }
 
   private getApiParams(extra: Record<string, string | number> = {}): Record<string, string | number> {
     return {
       biz_id: 'ai_qwen',
+      fe_version: '1.0.0',
       chat_client: 'h5',
       device: 'pc',
       fr: 'pc',
       pr: 'qwen',
-      ut: '5b68c267-cd8e-fd0e-148a-18345bc9a104',
-      la: 'zh_CN',
+      ut: this.getDeviceId(),
+      la: 'zh-CN',
       tz: 'Asia/Shanghai',
-      wv: '1',
-      ve: '1',
+      wv: '4.8.6',
+      tq: 'SD',
+      ve: '4.8.6',
       ...extra,
     }
   }
@@ -383,46 +391,63 @@ export class QwenAdapter {
 
     const timestamp = Date.now()
     const nonce = generateNonce()
+    const chatMode = enableThinking ? 'expert' : 'quick'
 
-    const requestBody = {
-      deep_search: (enableWebSearch || enableThinking) ? '1' : '0',
+    const requestBody: Record<string, any> = {
       req_id: reqId,
-      model: actualModel,
-      scene: 'chat',
-      session_id: sessionId,
-      sub_scene: 'chat',
-      temporary: false,
+      parent_req_id: '0',
       messages: [
         {
-          content: finalContent,
           mime_type: 'text/plain',
+          content: finalContent,
           meta_data: {
             ori_query: finalContent
-          }
+          },
+          status: 'complete',
         }
       ],
-      from: 'default',
-      parent_req_id: '0',
-      enable_search: enableWebSearch,
-      biz_data: '{"entryPoint":"tongyigw"}',
+      scene: 'chat',
+      sub_scene: '',
       scene_param: 'first_turn',
-      chat_client: 'h5',
-      client_tm: timestamp.toString(),
+      session_id: sessionId,
+      biz_id: 'ai_qwen',
+      topic_id: uuid(false).substring(0, 32),
+      model: actualModel,
+      from: 'default',
       protocol_version: 'v2',
-      biz_id: 'ai_qwen'
+      messages_merge: false,
+      chat_client: 'h5',
+      deep_search: (enableWebSearch || enableThinking) ? '1' : null,
+      temporary: false,
+      params_extra: {
+        supports_cowork: 'true',
+      },
+      chat_mode: chatMode,
+      cms_test_data_ids: '',
+      bucket: {},
     }
 
-    const queryString = `biz_id=ai_qwen&chat_client=h5&device=pc&fr=pc&pr=qwen&ut=${uuid(false)}&nonce=${nonce}&timestamp=${timestamp}`
-    const url = `${QWEN_API_BASE}/api/v2/chat?${queryString}`
+    const params = this.getApiParams({
+      nonce,
+      timestamp,
+    })
+
+    const url = `${QWEN_API_BASE}/api/v2/chat`
 
     console.log('[Qwen] Sending request to /api/v2/chat...')
 
     const response = await this.axiosInstance.post(url, requestBody, {
-      headers: {
-        ...DEFAULT_HEADERS,
-        'Content-Type': 'application/json',
-        Cookie: `tongyi_sso_ticket=${ticket}`,
-      },
+      headers: this.getApiHeaders(ticket, {
+        'x-chat-id': reqId,
+        'x-chat-biz': JSON.stringify({
+          chatId: reqId,
+          agentId: '',
+          enableWebp: '',
+          runtimeEnabled: true,
+          debugEnabled: true,
+        }),
+      }),
+      params,
       responseType: 'stream',
       timeout: 120000,
       decompress: false,
@@ -861,7 +886,7 @@ export class QwenStreamHandler {
         if (streamEnded) return
         try {
           const compressedData = Buffer.concat(chunks)
-          ZstdCodec.run((zstd) => {
+          ZstdCodec.run((zstd: any) => {
             const simple = new zstd.Simple()
             const decompressed = simple.decompress(compressedData)
             const decompressedStr = Buffer.from(decompressed).toString('utf8')
@@ -1110,7 +1135,7 @@ export class QwenStreamHandler {
         stream.once('end', () => {
           try {
             const compressedData = Buffer.concat(chunks)
-            ZstdCodec.run((zstd) => {
+            ZstdCodec.run((zstd: any) => {
               const simple = new zstd.Simple()
               const decompressed = simple.decompress(compressedData)
               const decompressedStr = Buffer.from(decompressed).toString('utf8')

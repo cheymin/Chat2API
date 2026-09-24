@@ -17,13 +17,15 @@ export const glmConfig: BuiltinProviderConfig = {
     'Origin': 'https://chatglm.cn',
     'Pragma': 'no-cache',
     'Priority': 'u=1, i',
-    'Sec-Ch-Ua': '"Microsoft Edge";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+    // Updated to Chrome 152 / Edge 152 fingerprint (HAR 2026-09-05)
+    'Sec-Ch-Ua': '"Chromium";v="152", "Not?A_Brand";v="24", "Microsoft Edge";v="152"',
     'Sec-Ch-Ua-Mobile': '?0',
     'Sec-Ch-Ua-Platform': '"Windows"',
     'Sec-Fetch-Dest': 'empty',
     'Sec-Fetch-Mode': 'cors',
     'Sec-Fetch-Site': 'same-origin',
-    'X-App-Fr': 'browser_extension',
+    // x-app-fr changed from 'browser_extension' to 'default' (HAR 2026-09-05)
+    'X-App-Fr': 'default',
     'X-App-Platform': 'pc',
     'X-App-Version': '0.0.1',
     'X-Device-Brand': '',
@@ -31,12 +33,16 @@ export const glmConfig: BuiltinProviderConfig = {
     'X-Lang': 'zh',
   },
   enabled: true,
-  description: 'Zhipu Qingyan AI assistant, supports GLM-5.2 flagship model, deep thinking and video generation',
+  description: 'Zhipu Qingyan AI assistant, supports GLM-5.3 and GLM-Flash with deep thinking and web search',
+  // HAR 2026-09-05 /agent-api/operation/detail?tag=available_models.
+  // Reasoning level is sent separately through `reasoning_effort`.
   supportedModels: [
-    'GLM-5.2',
+    'GLM-5.3',
+    'GLM-Flash',
   ],
   modelMappings: {
-    'GLM-5.2': 'glm-5.2',
+    'GLM-5.3': 'glm-5.3',
+    'GLM-Flash': 'glm-5.3-flash',
   },
   credentialFields: [
     {
@@ -45,7 +51,7 @@ export const glmConfig: BuiltinProviderConfig = {
       type: 'password',
       required: true,
       placeholder: 'Enter GLM refresh token',
-      helpText: 'Get refresh_token from Zhipu Qingyan web version, found in browser DevTools Application -> Local Storage -> chatglm_refresh_token',
+      helpText: 'Get refresh_token from Zhipu Qingyan web version, found in browser DevTools Application -> Cookie -> chatglm_refresh_token',
     },
   ],
   tokenCheckEndpoint: '/chatglm/user-api/user/refresh',

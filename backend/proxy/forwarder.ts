@@ -1204,13 +1204,15 @@ export class RequestForwarder {
             for await (const chunk of openAIStream) {
               transformedStream.write(chunk)
             }
-            await adapter.generateConversationTitle(
-              conversationId,
-              query,
-              handler.getAssistantContentForTitle()
-            )
             if (deleteSessionCallback) {
+              // Delete session after chat; skip title generation since conversation will be removed
               await deleteSessionCallback(conversationId)
+            } else {
+              await adapter.generateConversationTitle(
+                conversationId,
+                query,
+                handler.getAssistantContentForTitle()
+              )
             }
             transformedStream.end()
           } catch (error) {
@@ -1233,13 +1235,15 @@ export class RequestForwarder {
       const result = await handler.handleNonStream(response.data)
       const parsedResult = JSON.parse(result)
       this.applyToolCallsToResponse(parsedResult, transformed)
-      await adapter.generateConversationTitle(
-        conversationId,
-        query,
-        handler.getAssistantContentForTitle()
-      )
       if (deleteSessionCallback) {
+        // Delete session after chat; skip title generation since conversation will be removed
         await deleteSessionCallback(conversationId)
+      } else {
+        await adapter.generateConversationTitle(
+          conversationId,
+          query,
+          handler.getAssistantContentForTitle()
+        )
       }
 
       return {

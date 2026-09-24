@@ -5,7 +5,7 @@ export interface DeepSeekChatOptionInput {
 }
 
 export interface DeepSeekChatOptions {
-  modelType: 'default' | 'expert'
+  modelType: 'default' | 'expert' | 'vision'
   searchEnabled: boolean
   thinkingEnabled: boolean
 }
@@ -16,13 +16,22 @@ export function resolveDeepSeekChatOptions(
 ): DeepSeekChatOptions {
   const modelLower = request.model.toLowerCase()
   const isProModel = modelLower.includes('deepseek-v4-pro') || modelLower.includes('expert')
+  // 'vision' model type: image understanding mode (added in API v2.4.0, HAR 2026-09-05)
+  const isVisionModel = modelLower.includes('vision')
   const isSearchAlias = modelLower.includes('search')
   const isThinkingAlias = modelLower.includes('think')
     || modelLower.includes('r1')
     || modelLower.includes('reasoner')
 
+  let modelType: 'default' | 'expert' | 'vision' = 'default'
+  if (isVisionModel) {
+    modelType = 'vision'
+  } else if (isProModel) {
+    modelType = 'expert'
+  }
+
   return {
-    modelType: isProModel ? 'expert' : 'default',
+    modelType,
     searchEnabled: Boolean(request.web_search) || isSearchAlias,
     thinkingEnabled: Boolean(request.reasoning_effort)
       || isThinkingAlias,

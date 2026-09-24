@@ -253,6 +253,7 @@
       "deepseek-v4-flash-think": "DeepSeek V4 Flash - 思考",
       "deepseek-v4-flash-search": "DeepSeek V4 Flash - 搜索",
       "deepseek-v4-flash-think-search": "DeepSeek V4 Flash - 思考+搜索",
+      "deepseek-vision": "DeepSeek Vision - 识图模式",
       "deepseek-chat": "DeepSeek Chat (兼容旧名)",
       "deepseek-reasoner": "DeepSeek Reasoner (兼容旧名)",
       "DeepSeek-V3.2": "DeepSeek V3.2 - 标准对话",
@@ -263,7 +264,7 @@
   },
   "glm": {
     "name": "GLM",
-    "description": "智谱清言 AI 助手，支持 GLM-5.2 旗舰模型、深度思考和联网搜索",
+    "description": "智谱清言 AI 助手，支持 GLM-5.3、GLM-Flash、深度思考和联网搜索",
     "refreshToken": "刷新令牌",
     "refreshTokenPlaceholder": "请输入智谱清言刷新令牌",
     "refreshTokenHelp": "从智谱清言网页版获取 chatglm_refresh_token，可在浏览器开发者工具 Application -> Cookie 中找到"
@@ -271,9 +272,9 @@
   "kimi": {
     "name": "Kimi",
     "description": "Kimi AI 助手，支持长文本处理和联网搜索",
-    "accessToken": "访问令牌",
-    "accessTokenPlaceholder": "请输入 Kimi 访问令牌或刷新令牌",
-    "accessTokenHelp": "浏览器 Cookie 中的 kimi-auth 字段值（推荐），也可使用 JWT Token 或 refresh_token"
+    "accessToken": "访问令牌（Access Token）",
+    "accessTokenPlaceholder": "请输入 Kimi Access Token（以 eyJ 开头）",
+    "accessTokenHelp": "仅支持浏览器中获取的 Kimi Access Token（JWT）。refresh_token 当前无法使用，请勿填写。"
   },
   "minimax": {
     "name": "MiniMax",

@@ -35,11 +35,11 @@ export const kimiConfig: BuiltinProviderConfig = {
   credentialFields: [
     {
       name: 'token',
-      label: '访问令牌',
+      label: '访问令牌（Access Token）',
       type: 'password',
       required: true,
-      placeholder: '请输入 Kimi 访问令牌或刷新令牌',
-      helpText: '浏览器 Cookie 中的 kimi-auth 字段值（推荐），或 JWT Token / refresh_token',
+      placeholder: '请输入 Kimi Access Token（以 eyJ 开头）',
+      helpText: '仅支持浏览器中获取的 Kimi Access Token（JWT）。refresh_token 当前无法使用，请勿填写。',
     },
   ],
   tokenCheckEndpoint: '/api/auth/token/refresh',

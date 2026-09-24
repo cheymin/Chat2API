@@ -336,6 +336,17 @@ export class ConfigManager {
       }
     }
 
+    if (config.outboundProxy !== undefined && config.outboundProxy !== '') {
+      try {
+        const url = new URL(config.outboundProxy)
+        if (!['http:', 'https:', 'socks5:'].includes(url.protocol)) {
+          errors.push('outboundProxy must use http://, https://, or socks5:// protocol')
+        }
+      } catch {
+        errors.push('outboundProxy must be a valid URL (e.g. http://127.0.0.1:10808)')
+      }
+    }
+
     if (config.toolCallingConfig) {
       const normalized = normalizeToolCallingConfig(config.toolCallingConfig)
       if (
@@ -356,6 +367,7 @@ export class ConfigManager {
       valid: errors.length === 0,
       errors,
     }
+
   }
 
   /**

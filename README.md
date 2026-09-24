@@ -202,13 +202,14 @@ All configuration is done via environment variables or the `.env` file in the pr
 
 Works with Cherry Studio, Chatbox, OpenCat, Cline, Roo-Code, or any OpenAI-compatible tool.
 
-## 🔄 What's New in v1.4.0
+## 🔄 What's New in v1.4.0 (As of Sep 24, 2026)
 
-- **Model Updates** — All providers synced to latest upstream models (DeepSeek V4, GLM-5.2, Qwen3.6/3.7, MiniMax-M2.7, etc.)
+- **Model Updates** — All providers synced to latest upstream models (DeepSeek V4, GLM-5.3, Qwen3.6/3.7-Plus, MiniMax-M2.7, etc.)
 - **Session Management** — Qwen and Kimi now support batch session listing and deletion
 - **DeepSeek Search Enhancement** — Improved search result merging, citation handling, and semantic model detection
+- **Z.ai Captcha Support** — Added `captcha_verify_param` credential field for temporary risk control bypass
 - **Thinking Mode Improvements** — Better thinking/search/fold mode detection across all providers
-- **Updated Browser Fingerprints** — Chrome 148 UA and headers for DeepSeek, Z.ai
+- **Updated Browser Fingerprints** — Perplexity, Z.ai, and Qwen AI (International) updated to Edge 153 / Chrome 153 UA and latest headers.
 
 ## 友情链接
 

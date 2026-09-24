@@ -17,28 +17,32 @@ const DEFAULT_HEADERS = {
   'Accept-Language': 'zh-CN,zh;q=0.9',
   'Content-Type': 'application/json',
   source: 'web',
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
-  'sec-ch-ua': '"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36 Edg/153.0.0.0',
+  'sec-ch-ua': '"Microsoft Edge";v="153", "Not_A Brand";v="8", "Chromium";v="153"',
   'sec-ch-ua-mobile': '?0',
-  'sec-ch-ua-platform': '"macOS"',
+  'sec-ch-ua-platform': '"Windows"',
   'Sec-Fetch-Dest': 'empty',
   'Sec-Fetch-Mode': 'cors',
   'Sec-Fetch-Site': 'same-origin',
   'bx-v': '2.5.36',
   'bx-umidtoken': 'T2gAr9z8byN8sNOmfQ3X9j61MNTNmSqDO5L1rs2jMcQCVhOKgZICcBN-UdTuJGig-NM=',
   'bx-ua': '231!lWD36kmUe5E+joKDK5gBZ48FEl2ZWfPwIPF92lBLek2KxVW/XJ2EwruCiDOX5Px4EXNhmh6EfS9eDwQGRwijIK64A4nPqeLysJcDjUACje/H3J4ZgGZpicG6K8AkiGGaEKC830+QSiSUsLRlL/EyhXTmLcJc/5iDkMuOpUhNz0e0Q/nTqjVJ3ko00Q/oyE+jauHhUHfb1GxGHkE+++3+qCS4+ItkaA6tiItCo+romzElfLFD6RIj7oHt9vffs98nLwpHnaqKjufnLFMejSlAUGiQvTofIiGhIvftAMcoFV4mrUHsqyQ/ncQihmJHkbxXjvM57FCb6b9dEIRZl7jgj0+QLNLRs0NZ4azdZ6rzbGTSO8KA5I3Aq/3gBr87X16Mj0oJtaPKmFGaP2zghfOVhxQht8YjRd50lJa+Ue4PAuPSdu2O69DKLH8VOhrsB+psaBIRxnRi5POUQ6w8s8qlb9vxvExjHNOAKWXV1by1Nz+6FPWdyTeAgcmonjCcV0dCtPj/KyeVDkeSrDkKZjnDzHEqeCdfmJ65kve+Vy3YS0vagzyHfVEnzN0ULUZtkGfJXFNm6+bIa55wmGBhUeXbHL0EdlQXMu1YXxmcwBgTaq7tlQcfv7AefanbfjGE8R1IFnNyg2/jXLbnLg5Z6l1oKqgnxZQg0DE9BJuw6s0XjGwTdSxybWxp+WFD/RsXt76uwvCBk7z+YmSFLtFj2UlTsoq+vl0DTmsVItDKf9SZ94NcuJ7mxJYI02S/2kQBfbbHG0d4hXevDrEC0cb86EvzN2ud+v6bAunNRGNFz/RH0KLusoBVeo+puCFKeeIJWEo0t1UicX5YxJwMAoV7+g0gK93y4W9sMQtso8/wY5wsBzis9dwfLvIwXpaAM1g0MZp/YIRq8T/Qc+U/8x99tam4er0IWizvrkjqhIzCWBKpJ4Y4gj3bOmiS3VCMEaoVfKCwUWENwYKuP3H5VI0n+O2vVVRrekUrwvkm6URRhVhN4eEFTCjB9nSQu++qKyDH8HPpkS3YfwF8/OQtrZo7hQXxvNmP2HcH/K7zcweD00BaoOLiYUtXRItGYbl06sVSbm04soRf1Jqpyo3XiRqBWD9rmJfr4w8NOEGVGUCKXLDLsXy+8JC4Iqf0FsIjWxjMVdraTUtCbwXRbYUownQVm6bt7LYD1SNPoWNPqUJgsLMwP33ugrb1UbHCs24roOch6Go5QHIPA8E15SZE9pkr1SkmqrNs/+KRomFJ9HyFnWUYhZIV9MRLqlOAt6XBBTash3WJnCjhx/PZGhXVvdn2jX4+0Pm55LsiNugA8vaAUJQBxD/8a1u/RvTgbj35+b7I7m8tG0hMhClNZF+tpsOmZZhUGuXH9uVbkJMlMuAmMVCHwn3O31GlLeXXzzep2WS3xN2U+p5J0I7GySnuZUkuGs1ZTVqGUvR2g4q+7ljU55Ak78yPZiQXeUeqS74azszvZvCqWxXn2eePj+gcpliOjrYKpglUP19rQrMt8PqLt8L0ghIqVCmMwl3Hgr/VUcqDpXdpPTR=',
-  Timezone: 'Mon Feb 23 2026 22:06:02 GMT+0800',
-  Version: '0.2.7',
+  Timezone: 'Thu Sep 24 2026 17:52:12 GMT+0800',
+  Version: '0.2.91',
   Origin: 'https://chat.qwen.ai',
 }
 
+// The current chat.qwen.ai HAR confirms qwen3.7-plus as the available chat model.
+// Keep legacy OpenAI-facing labels usable by routing them to this current model.
 const MODEL_ALIASES: Record<string, string> = {
-  qwen: 'qwen3.7-max',
-  qwen3: 'qwen3.7-max',
-  'qwen3.7': 'qwen3.7-max',
-  'qwen3.6': 'qwen3.6-plus',
-  'qwen3.6-35b': 'qwen3.6-35b-a3b',
-  'qwen3.6-27b': 'qwen3.6-27b',
+  qwen: 'qwen3.7-plus',
+  qwen3: 'qwen3.7-plus',
+  'qwen3.7': 'qwen3.7-plus',
+  'qwen3.7-max': 'qwen3.7-plus',
+  'qwen3.6': 'qwen3.7-plus',
+  'qwen3.6-plus': 'qwen3.7-plus',
+  'qwen3.6-35b': 'qwen3.7-plus',
+  'qwen3.6-27b': 'qwen3.7-plus',
   'qwen3-coder': 'qwen3-coder-plus',
 }
 
@@ -71,6 +75,28 @@ function timestamp(): number {
   return Date.now()
 }
 
+function extractTextContent(content: string | any[]): string {
+  if (typeof content === 'string') {
+    return content
+  }
+
+  if (!Array.isArray(content)) {
+    return ''
+  }
+
+  return content
+    .map((part) => {
+      if (typeof part === 'string') return part
+      if (!part || typeof part !== 'object') return ''
+      if (typeof part.text === 'string') return part.text
+      if (typeof part.content === 'string') return part.content
+      if (part.type === 'image_url' || part.type === 'input_image') return '[Image omitted]'
+      return ''
+    })
+    .filter(Boolean)
+    .join('\n')
+}
+
 export class QwenAiAdapter {
   private provider: Provider
   private account: Account
@@ -87,20 +113,46 @@ export class QwenAiAdapter {
 
   private getToken(): string {
     const credentials = this.account.credentials
-    return credentials.token || credentials.accessToken || credentials.apiKey || ''
+    const explicitToken = credentials.token || credentials.accessToken || credentials.apiKey
+    if (explicitToken) {
+      return explicitToken
+    }
+
+    // Older Qwen AI accounts stored the entire browser Cookie header in `ticket`.
+    const legacyValue = credentials.ticket || ''
+    const tokenMatch = legacyValue.match(/(?:^|;\s*)token=([^;]+)/)
+    return tokenMatch?.[1] || ''
   }
 
   private getCookies(): string {
     const credentials = this.account.credentials
-    return credentials.cookies || credentials.cookie || ''
+    const explicitCookies = credentials.cookies || credentials.cookie
+    if (explicitCookies) {
+      return explicitCookies
+    }
+
+    // Preserve legacy saved accounts without requiring the user to re-enter data.
+    const legacyValue = credentials.ticket || ''
+    return legacyValue.includes('=') ? legacyValue : ''
   }
 
   private getHeaders(chatId?: string): Record<string, string> {
+    const {
+      'bx-v': _bxVersion,
+      'bx-ua': _bxUa,
+      'bx-umidtoken': _bxUmidToken,
+      ...baseHeaders
+    } = DEFAULT_HEADERS
+    const credentials = this.account.credentials
     const headers: Record<string, string> = {
-      ...DEFAULT_HEADERS,
+      ...baseHeaders,
       Authorization: `Bearer ${this.getToken()}`,
       'X-Request-Id': uuid(),
     }
+
+    if (credentials.bx_v) headers['bx-v'] = credentials.bx_v
+    if (credentials.bx_ua) headers['bx-ua'] = credentials.bx_ua
+    if (credentials.bx_umidtoken) headers['bx-umidtoken'] = credentials.bx_umidtoken
 
     if (chatId) {
       headers['Referer'] = `https://chat.qwen.ai/c/${chatId}`
@@ -269,9 +321,10 @@ export class QwenAiAdapter {
     // Single-turn mode: extract all messages
     for (const msg of messages) {
       if (msg.role === 'system') {
-        systemContent += (systemContent ? '\n\n' : '') + msg.content
+        const content = extractTextContent(msg.content)
+        systemContent += (systemContent ? '\n\n' : '') + content
       } else if (msg.role === 'user') {
-        userContent = msg.content
+        userContent = extractTextContent(msg.content)
       }
     }
     
@@ -310,12 +363,15 @@ export class QwenAiAdapter {
       stream: true,
       version: '2.1',
       incremental_output: true,
+      chatId,
+      parentId: null,
       chat_id: chatId,
       chat_mode: 'normal',
       model: modelId,
       parent_id: null,
       messages: [
         {
+          id: null,
           fid,
           parentId: null,
           childrenIds: [childId],
@@ -325,6 +381,7 @@ export class QwenAiAdapter {
           files: [],
           timestamp: ts,
           models: [modelId],
+          model: '',
           chat_type: 't2t',
           feature_config: featureConfig,
           extra: { meta: { subChatType: 't2t' } },
@@ -340,11 +397,16 @@ export class QwenAiAdapter {
     console.log('[QwenAI] Sending request to /api/v2/chat/completions...')
     console.log('[QwenAI] Request URL:', url)
     console.log('[QwenAI] Request payload:', JSON.stringify(payload, null, 2))
-    console.log('[QwenAI] Request headers:', JSON.stringify(this.getHeaders(chatId), null, 2))
+    const headers = this.getHeaders(chatId)
+    console.log('[QwenAI] Request headers:', JSON.stringify({
+      ...headers,
+      Authorization: headers.Authorization ? 'Bearer [REDACTED]' : undefined,
+      Cookie: headers.Cookie ? '[REDACTED]' : undefined,
+    }, null, 2))
 
     const response = await this.axiosInstance.post(url, payload, {
       headers: {
-        ...this.getHeaders(chatId),
+        ...headers,
         'x-accel-buffering': 'no',
       },
       responseType: 'stream',
@@ -353,6 +415,24 @@ export class QwenAiAdapter {
 
     console.log('[QwenAI] Response status:', response.status)
     console.log('[QwenAI] Response headers:', JSON.stringify(response.headers, null, 2))
+
+    const contentType = String(response.headers['content-type'] || '').toLowerCase()
+    if (!contentType.includes('text/event-stream')) {
+      const chunks: Buffer[] = []
+      for await (const chunk of response.data) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+      }
+
+      const rawBody = Buffer.concat(chunks).toString('utf8')
+      let errorMessage = rawBody || `Unexpected ${contentType || 'response'} from Qwen AI`
+      try {
+        const errorBody = JSON.parse(rawBody)
+        errorMessage = errorBody?.data?.details || errorBody?.error?.message || errorBody?.message || errorMessage
+      } catch {
+        // Keep the raw response when Qwen did not return JSON.
+      }
+      throw new Error(`Qwen AI request failed: ${errorMessage}`)
+    }
 
     return {
       response,

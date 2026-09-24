@@ -253,6 +253,7 @@
       "deepseek-v4-flash-think": "DeepSeek V4 Flash - Pensar",
       "deepseek-v4-flash-search": "DeepSeek V4 Flash - Búsqueda",
       "deepseek-v4-flash-think-search": "DeepSeek V4 Flash - Pensar+Búsqueda",
+      "deepseek-vision": "DeepSeek Vision - Modo Visión",
       "deepseek-chat": "DeepSeek Chat (heredado)",
       "deepseek-reasoner": "DeepSeek Reasoner (heredado)",
       "DeepSeek-V3": {
@@ -274,8 +275,8 @@
     "name": "Kimi",
     "description": "Asistente de IA Kimi, admite procesamiento de texto largo y búsqueda web",
     "accessToken": "Access Token",
-    "accessTokenPlaceholder": "Introducir Access Token o Refresh Token de Kimi",
-    "accessTokenHelp": "El valor kimi-auth de las cookies del navegador (recomendado), o Token JWT / refresh_token"
+    "accessTokenPlaceholder": "Introduce el Access Token de Kimi (empieza por eyJ)",
+    "accessTokenHelp": "Solo se admiten Access Token JWT de Kimi obtenidos del navegador. refresh_token no es compatible actualmente; no lo introduzcas."
   },
   "minimax": {
     "name": "MiniMax",

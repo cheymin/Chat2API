@@ -62,6 +62,7 @@ const FAKE_USER_DATA: Record<string, any> = {
   timezone_offset: 28800,
   sys_language: 'zh',
   client: 'web',
+  region: 'cn',
 }
 
 interface MiniMaxMessage {
@@ -98,6 +99,31 @@ interface CreditInfo {
   expiresAt?: number // Credit reset timestamp (milliseconds)
 }
 
+interface DailySignInStatus {
+  data?: {
+    days?: Array<{
+      status?: number
+      is_today?: boolean
+      points?: number
+    }>
+  }
+  base_resp?: {
+    status_code?: number
+    status_msg?: string
+  }
+}
+
+interface DailySignInClaimResult {
+  data?: {
+    points?: number
+    claim_result?: number
+  }
+  base_resp?: {
+    status_code?: number
+    status_msg?: string
+  }
+}
+
 interface ChatListItem {
   chat_id: number
   chat_name: string
@@ -106,6 +132,7 @@ interface ChatListItem {
 }
 
 const deviceInfoMap = new Map<string, DeviceInfo>()
+const dailySignInCache = new Map<string, string>()
 const DEVICE_INFO_EXPIRES = 10800
 
 function uuid(): string {
@@ -167,6 +194,7 @@ export class MiniMaxAdapter {
   private rawToken: string
   private jwtToken: string
   private realUserID: string
+  private uetsid: string
   private jwtDeviceId: string
   private model: string
   private created: number
@@ -182,6 +210,7 @@ export class MiniMaxAdapter {
     this.rawToken = `${resolved.realUserID}+${resolved.jwtToken}`
     this.jwtToken = resolved.jwtToken
     this.realUserID = resolved.realUserID
+    this.uetsid = resolved.uetsid
     this.jwtDeviceId = extractJWTDeviceID(resolved.jwtToken)
     this.model = 'MiniMax-M2.7'
     this.created = unixTimestamp()
@@ -240,7 +269,7 @@ export class MiniMaxAdapter {
     const fullUri = `${uri}${uri.lastIndexOf('?') != -1 ? '&' : '?'}${queryStr}`;
     
     let base = AGENT_BASE_URL;
-    if (uri.includes('/message')) {
+    if (uri.endsWith('/message')) {
       base = 'https://agent-stream.minimaxi.com';
     }
     
@@ -257,6 +286,7 @@ export class MiniMaxAdapter {
       headers: {
         Referer: `${AGENT_BASE_URL}/`,
         token: this.jwtToken,
+        ...(this.uetsid ? { Cookie: `_uetsid=${this.uetsid}` } : {}),
         ...FAKE_HEADERS,
         'Content-Type': 'application/json',
         'x-timestamp': String(timestamp),
@@ -264,6 +294,46 @@ export class MiniMaxAdapter {
         yy: yy,
       },
     });
+  }
+
+  private getBeijingDayKey(): string {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date())
+  }
+
+  private async claimDailySignIn(deviceInfo: DeviceInfo): Promise<void> {
+    const today = this.getBeijingDayKey()
+    if (dailySignInCache.get(this.rawToken) === today) return
+
+    try {
+      const statusResponse = await this.request('GET', '/minimax-cloud/api/v1/signin/status', {}, deviceInfo)
+      const status = statusResponse.data as DailySignInStatus
+      if (statusResponse.status !== 200 || status.base_resp?.status_code !== 0) {
+        console.warn('[MiniMax] Failed to read daily sign-in status')
+        return
+      }
+
+      const todayReward = status.data?.days?.find(day => day.is_today)
+      if (todayReward?.status !== 2) {
+        dailySignInCache.set(this.rawToken, today)
+        return
+      }
+
+      const claimResponse = await this.request('POST', '/minimax-cloud/api/v1/signin/claim', {}, deviceInfo)
+      const claim = claimResponse.data as DailySignInClaimResult
+      if (claimResponse.status === 200 && claim.base_resp?.status_code === 0) {
+        dailySignInCache.set(this.rawToken, today)
+        console.log(`[MiniMax] Daily sign-in claimed: ${claim.data?.points ?? 0} points`)
+      } else {
+        console.warn('[MiniMax] Daily sign-in claim failed')
+      }
+    } catch (error) {
+      console.warn('[MiniMax] Daily sign-in request failed:', error instanceof Error ? error.message : 'Unknown error')
+    }
   }
 
   private messagesPrepare(messages: MiniMaxMessage[], toolsPrompt?: string, isMultiTurn: boolean = false): any {
@@ -391,6 +461,7 @@ export class MiniMaxAdapter {
     this.created = unixTimestamp();
     
     const deviceInfo = await this.requestDeviceInfo();
+    await this.claimDailySignIn(deviceInfo)
     const messages = [...request.messages];
     
     let toolsPrompt = '';
@@ -410,7 +481,7 @@ export class MiniMaxAdapter {
     const requestBodyTemp = this.messagesPrepare(messages, toolsPrompt, false);
     const textContent = requestBodyTemp.text;
     
-    const agentRes = await this.request('GET', '/archon/api/v1/agent', {}, deviceInfo);
+    const agentRes = await this.request('GET', '/minimax-cloud/api/v1/agent?limit=20', {}, deviceInfo);
     if (agentRes.status !== 200 || agentRes.data?.base_resp?.status_code !== 0) {
       throw new Error('Failed to get MiniMax agent list');
     }
@@ -421,7 +492,18 @@ export class MiniMaxAdapter {
     }
     const agentId = defaultAgent.name;
     
-    const sessionRes = await this.request('POST', `/archon/api/v1/agent/${agentId}/session`, { model: `minimax/${this.model}` }, deviceInfo);
+    const sessionRes = await this.request(
+      'POST',
+      `/minimax-cloud/api/v1/agent/${agentId}/session`,
+      {
+        model: {
+          provider_id: 'minimax',
+          model_id: this.model,
+          variant: this.model.toLowerCase().includes('thinking') || this.model.toLowerCase().includes('m3') ? 'thinking' : '',
+        },
+      },
+      deviceInfo,
+    );
     if (sessionRes.status !== 200 || sessionRes.data?.base_resp?.status_code !== 0) {
       throw new Error('Failed to create MiniMax session');
     }
@@ -441,7 +523,7 @@ export class MiniMaxAdapter {
     };
     
     if (request.stream) {
-      const msgRes = await this.request('POST', `/archon/api/v1/session/${sessionId}/message`, payload, deviceInfo, true);
+      const msgRes = await this.request('POST', `/minimax-cloud/api/v1/session/${sessionId}/message`, payload, deviceInfo, true);
       const transStream = new PassThrough();
       
       transStream.write(`data: ${JSON.stringify({
@@ -452,17 +534,24 @@ export class MiniMaxAdapter {
         created: this.created,
       })}\n\n`);
       
+      let streamCompleted = false;
+      const finishStream = () => {
+        if (streamCompleted) return;
+        streamCompleted = true;
+        transStream.write(`data: ${JSON.stringify({
+          id: sessionId,
+          model: this.model,
+          object: 'chat.completion.chunk',
+          choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+          created: this.created,
+        })}\n\n`);
+        transStream.end('data: [DONE]\n\n');
+      };
+      
       const parser = createParser({
         onEvent: (event: EventSourceMessage) => {
         if (event.data === '[DONE]') {
-          transStream.write(`data: ${JSON.stringify({
-            id: sessionId,
-            model: this.model,
-            object: 'chat.completion.chunk',
-            choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
-            created: this.created,
-          })}\n\n`);
-          transStream.end('data: [DONE]\n\n');
+          finishStream();
           return;
         }
         try {
@@ -493,11 +582,11 @@ export class MiniMaxAdapter {
       });
       
       msgRes.data.on('data', (chunk: Buffer) => parser.feed(chunk.toString('utf8')));
-      msgRes.data.on('end', () => transStream.end('data: [DONE]\n\n'));
+      msgRes.data.on('end', finishStream);
       
       return { response: null, stream: { session: null as any, stream: transStream as any }, chatId: sessionId };
     } else {
-      const msgRes = await this.request('POST', `/archon/api/v1/session/${sessionId}/message`, payload, deviceInfo, true);
+      const msgRes = await this.request('POST', `/minimax-cloud/api/v1/session/${sessionId}/message`, payload, deviceInfo, true);
       let fullContent = '';
       let fullThinking = '';
       

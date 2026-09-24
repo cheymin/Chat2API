@@ -19,17 +19,22 @@ const KIMI_API_BASE = 'https://www.kimi.com'
 const FAKE_HEADERS: Record<string, string> = {
   Accept: '*/*',
   'Accept-Encoding': 'gzip, deflate, br, zstd',
-  'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+  'Accept-Language': 'zh-CN,zh;q=0.9',
   'Cache-Control': 'no-cache',
+  'Connect-Protocol-Version': '1',
   Pragma: 'no-cache',
   Origin: KIMI_API_BASE,
-  'Sec-Ch-Ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+  'R-Timezone': 'Asia/Shanghai',
+  'Sec-Ch-Ua': '"Chromium";v="152", "Not?A_Brand";v="24", "Google Chrome";v="152"',
   'Sec-Ch-Ua-Mobile': '?0',
   'Sec-Ch-Ua-Platform': '"Windows"',
   'Sec-Fetch-Dest': 'empty',
   'Sec-Fetch-Mode': 'cors',
   'Sec-Fetch-Site': 'same-origin',
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
+  'X-Language': 'zh-CN',
+  'X-Msh-Platform': 'web',
+  'X-Msh-Version': '2.1.0',
   Priority: 'u=1, i',
 }
 
@@ -382,8 +387,20 @@ export class KimiAdapter {
         }
       )
 
-      console.log('[Kimi] Chat deleted:', conversationId, 'Status:', response.status)
-      return response.status === 200
+      const deletedChatId = typeof response.data?.chatId === 'string' ? response.data.chatId : ''
+      const success = response.status === 200 && deletedChatId === conversationId
+      console.log('[Kimi] DeleteChat response:', {
+        conversationId,
+        status: response.status,
+        deletedChatId: deletedChatId || undefined,
+        success,
+      })
+
+      if (!success) {
+        console.error('[Kimi] DeleteChat failed:', response.data)
+      }
+
+      return success
     } catch (error) {
       console.error('[Kimi] Failed to delete conversation:', error)
       return false

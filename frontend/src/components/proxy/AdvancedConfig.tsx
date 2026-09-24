@@ -16,21 +16,24 @@ interface AdvancedConfigProps {
 interface FormErrors {
   timeout?: string
   retryCount?: string
+  outboundProxy?: string
 }
 
 export function AdvancedConfig({ onConfigChange }: AdvancedConfigProps) {
   const { t } = useTranslation()
-  const { proxyConfig, setProxyConfig, saveAppConfig, isLoading } = useProxyStore()
+  const { proxyConfig, setProxyConfig, appConfig, saveAppConfig, isLoading } = useProxyStore()
   const { toast } = useToast()
   
   const initialFormDataRef = useRef({
     timeout: (proxyConfig.timeout / 1000).toString(),
     retryCount: proxyConfig.retryCount.toString(),
+    outboundProxy: appConfig?.outboundProxy || '',
   })
 
   const [formData, setFormData] = useState({
     timeout: (proxyConfig.timeout / 1000).toString(),
     retryCount: proxyConfig.retryCount.toString(),
+    outboundProxy: appConfig?.outboundProxy || '',
   })
   
   const [errors, setErrors] = useState<FormErrors>({})
@@ -40,10 +43,11 @@ export function AdvancedConfig({ onConfigChange }: AdvancedConfigProps) {
     const newFormData = {
       timeout: (proxyConfig.timeout / 1000).toString(),
       retryCount: proxyConfig.retryCount.toString(),
+      outboundProxy: appConfig?.outboundProxy || '',
     }
     setFormData(newFormData)
     initialFormDataRef.current = newFormData
-  }, [])
+  }, [proxyConfig, appConfig])
 
   const validateTimeout = (value: string): string | undefined => {
     const timeout = parseInt(value, 10)
@@ -56,6 +60,19 @@ export function AdvancedConfig({ onConfigChange }: AdvancedConfigProps) {
     const count = parseInt(value, 10)
     if (isNaN(count)) return t('proxy.retryCountMustBeNumber')
     if (count < 0 || count > 10) return t('proxy.retryCountRangeError')
+    return undefined
+  }
+
+  const validateOutboundProxy = (value: string): string | undefined => {
+    if (!value) return undefined // Optional
+    try {
+      const url = new URL(value)
+      if (!['http:', 'https:', 'socks5:'].includes(url.protocol)) {
+        return 'Must use http://, https://, or socks5:// protocol'
+      }
+    } catch {
+      return 'Must be a valid URL (e.g. http://127.0.0.1:10808)'
+    }
     return undefined
   }
 
@@ -75,14 +92,24 @@ export function AdvancedConfig({ onConfigChange }: AdvancedConfigProps) {
     onConfigChange?.()
   }
 
+  const handleOutboundProxyChange = (value: string) => {
+    setFormData(prev => ({ ...prev, outboundProxy: value }))
+    const error = validateOutboundProxy(value)
+    setErrors(prev => ({ ...prev, outboundProxy: error }))
+    setHasChanges(true)
+    onConfigChange?.()
+  }
+
   const handleSave = async () => {
     const timeoutError = validateTimeout(formData.timeout)
     const retryError = validateRetryCount(formData.retryCount)
+    const proxyError = validateOutboundProxy(formData.outboundProxy)
 
-    if (timeoutError || retryError) {
+    if (timeoutError || retryError || proxyError) {
       setErrors({
         timeout: timeoutError,
         retryCount: retryError,
+        outboundProxy: proxyError,
       })
       toast({
         title: t('proxy.validationFailed'),
@@ -102,6 +129,7 @@ export function AdvancedConfig({ onConfigChange }: AdvancedConfigProps) {
     const success = await saveAppConfig({
       requestTimeout: newProxyConfig.timeout,
       retryCount: newProxyConfig.retryCount,
+      outboundProxy: formData.outboundProxy,
     })
 
     if (success) {
@@ -125,7 +153,7 @@ export function AdvancedConfig({ onConfigChange }: AdvancedConfigProps) {
     setHasChanges(false)
   }
 
-  const isValid = !errors.timeout && !errors.retryCount
+  const isValid = !errors.timeout && !errors.retryCount && !errors.outboundProxy
 
   return (
     <Card>
@@ -197,6 +225,35 @@ export function AdvancedConfig({ onConfigChange }: AdvancedConfigProps) {
               />
               <p className="text-xs text-muted-foreground">
                 {t('proxy.retryCountHelp')}
+              </p>
+            </div>
+          </div>
+
+          <h4 className="text-sm font-medium mt-6">{t('proxy.networkConfig', 'Network Config')}</h4>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="outboundProxy" className="flex items-center gap-2">
+                {t('proxy.outboundProxy', 'Outbound Proxy (Optional)')}
+                {errors.outboundProxy && (
+                  <span className="text-destructive text-xs flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {errors.outboundProxy}
+                  </span>
+                )}
+                {!errors.outboundProxy && formData.outboundProxy && (
+                  <CheckCircle2 className="h-3 w-3 text-green-500" />
+                )}
+              </Label>
+              <Input
+                id="outboundProxy"
+                type="text"
+                placeholder="http://127.0.0.1:10808"
+                value={formData.outboundProxy}
+                onChange={(e) => handleOutboundProxyChange(e.target.value)}
+                className={errors.outboundProxy ? 'border-destructive' : ''}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t('proxy.outboundProxyHelp', 'HTTP/SOCKS5 proxy used to access upstream providers (e.g. Perplexity)')}
               </p>
             </div>
           </div>

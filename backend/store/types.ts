@@ -219,6 +219,13 @@ export interface AppConfig {
   managementApi: ManagementApiConfig
   /** Context management configuration */
   contextManagement: ContextManagementConfig
+  /**
+   * Outbound HTTP/SOCKS proxy URL for upstream API requests.
+   * Used by providers that cannot be accessed directly (e.g. Perplexity from mainland China).
+   * Format: http://host:port or socks5://host:port
+   * Leave empty to disable.
+   */
+  outboundProxy?: string
 }
 
 /**
@@ -739,6 +746,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   toolPromptConfig: undefined,
   managementApi: DEFAULT_MANAGEMENT_API_CONFIG,
   contextManagement: DEFAULT_CONTEXT_MANAGEMENT_CONFIG,
+  outboundProxy: '',
 }
 
 /**

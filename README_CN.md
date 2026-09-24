@@ -214,14 +214,14 @@ npm run dev
 
 支持 Cherry Studio、Chatbox、OpenCat、Cline、Roo-Code 或任何 OpenAI 兼容工具。
 
-## 🔄 v1.4.0 更新内容
+## 🔄 v1.4.0 更新内容 (截至 2026年9月24日)
 
-- **模型更新** — 所有供应商同步至最新上游模型（DeepSeek V4、GLM-5.2、Qwen3.6/3.7、MiniMax-M2.7 等）
+- **模型更新** — 所有供应商同步至最新上游模型（DeepSeek V4、GLM-5.3、Qwen3.6/3.7-Plus、MiniMax-M2.7 等）
 - **会话管理** — Qwen 和 Kimi 新增批量会话列表及删除功能
 - **DeepSeek 搜索增强** — 改进搜索结果合并、引用处理和语义模型检测
-- **Z.ai 验证码支持** — 新增 `captcha_verify_param` 凭证字段
+- **Z.ai 验证码支持** — 新增 `captcha_verify_param` 凭证字段，支持临时风控验证
 - **思考模式改进** — 所有供应商的思考/搜索/折叠模式检测优化
-- **浏览器指纹更新** — DeepSeek、Z.ai 更新至 Chrome 148 UA 和请求头.
+- **浏览器指纹更新** — Perplexity、Z.ai、Qwen 国际版等已全面更新至 Edge 153 / Chrome 153 UA 和最新请求头参数。
 
 ## 友情链接
 

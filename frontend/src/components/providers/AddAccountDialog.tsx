@@ -823,10 +823,10 @@ function getDefaultCredentialFields(authType?: string, t?: (key: string) => stri
       },
       {
         name: 'realUserID',
-        label: 'Real User ID',
+        label: 'Real User ID（可选）',
         type: 'text',
         required: false,
-        placeholder: t ? t('minimax.realUserIDPlaceholder') : 'realUserID from user_detail_agent (optional)',
+        placeholder: t ? t('minimax.realUserIDPlaceholder') : 'Optional — auto-read from JWT when blank',
       },
     ],
   }

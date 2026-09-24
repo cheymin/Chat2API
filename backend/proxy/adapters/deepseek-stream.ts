@@ -249,6 +249,13 @@ export class DeepSeekStreamHandler {
         const trimmedLine = line.trim()
         if (!trimmedLine) continue
 
+        // Skip named SSE event lines (event: ready, event: update_session, event: close)
+        // These are control events added in API v2.4.0 and do not contain response content
+        if (trimmedLine.startsWith('event:')) {
+          console.log('[DeepSeek Stream] Skipping named SSE event:', trimmedLine)
+          continue
+        }
+
         if (trimmedLine.startsWith('data:')) {
           const data = trimmedLine.slice(5).trim()
           if (data === '[DONE]') {
@@ -396,12 +403,22 @@ export class DeepSeekStreamHandler {
     }
 
     // Incremental fragment content patches (e.g. response/fragments/0/content)
+    // Supports both SET and APPEND operations (o field, as observed in HAR 2026-09-05)
     if (chunk.p && /^response\/fragments\/-?\d+\/content$/.test(chunk.p) && typeof chunk.v === 'string') {
       if (!this.currentPath) {
         this.currentPath = 'content'
       }
       this.sendContent(chunk.v, this.currentPath, transStream, isSilentModel, isFoldModel, isSearchSilentModel)
       return
+    }
+
+    // Handle quasi_status FINISHED signal (batch response end marker)
+    if (chunk.p === 'response' && chunk.o === 'BATCH' && Array.isArray(chunk.v)) {
+      const hasFinished = chunk.v.some((e: any) => e.p === 'quasi_status' && e.v === 'FINISHED')
+      if (hasFinished) {
+        console.log('[DeepSeek Stream] Received quasi_status FINISHED')
+        // Allow normal stream end handling; do not force done here
+      }
     }
 
     let content = ''
