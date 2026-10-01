@@ -11,6 +11,7 @@ import {
   Info,
   MessageSquare,
   X,
+  Package,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settingsStore'

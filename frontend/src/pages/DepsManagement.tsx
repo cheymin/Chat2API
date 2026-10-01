@@ -15,11 +15,6 @@ interface DepItem {
   description: string;
 }
 
-interface DepsResponse {
-  deps: DepItem[];
-  summary: { total: number; installed: number; missing: number };
-}
-
 const categoryLabel: Record<string, string> = {
   'node-cli': 'Node CLI',
   'python': 'Python',
@@ -29,7 +24,7 @@ const categoryLabel: Record<string, string> = {
 };
 
 export function DepsManagement() {
-  const { t } = useTranslation();
+  const { t: _t } = useTranslation();;
   const [deps, setDeps] = useState<DepItem[]>([]);
   const [summary, setSummary] = useState({ total: 0, installed: 0, missing: 0 });
   const [loading, setLoading] = useState(true);
