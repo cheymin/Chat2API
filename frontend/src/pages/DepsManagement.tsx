@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Package, CheckCircle2, XCircle, Loader2, RefreshCw, Terminal, Zap } from 'lucide-react';
+import { Package, CheckCircle2, XCircle, Loader2, RefreshCw, Zap } from 'lucide-react';
+import { apiClient } from '@/services/api';
 
 interface DepItem {
   name: string;
@@ -24,7 +25,7 @@ const categoryLabel: Record<string, string> = {
 };
 
 export function DepsManagement() {
-  const { t: _t } = useTranslation();;
+  const { t } = useTranslation();
   const [deps, setDeps] = useState<DepItem[]>([]);
   const [summary, setSummary] = useState({ total: 0, installed: 0, missing: 0 });
   const [loading, setLoading] = useState(true);
@@ -36,16 +37,11 @@ export function DepsManagement() {
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetch('/v0/management/deps/check');
-      const data = await resp.json();
-      if (data.success) {
-        setDeps(data.data.deps);
-        setSummary(data.data.summary);
-      } else {
-        setError(data.error?.message || '检测失败');
-      }
+      const data: any = await apiClient.get('/deps/check');
+      setDeps(data.deps);
+      setSummary(data.summary);
     } catch (e: any) {
-      setError(e.message);
+      setError(e.response?.data?.error?.message || e.message || '检测失败（请先在设置里完成 Management API 认证）');
     } finally {
       setLoading(false);
     }
@@ -56,8 +52,7 @@ export function DepsManagement() {
   const installOne = async (key: string) => {
     setInstalling(key);
     try {
-      const resp = await fetch(`/v0/management/deps/install/${key}`, { method: 'POST' });
-      await resp.json();
+      await apiClient.post(`/deps/install/${key}`);
       await fetchDeps();
     } finally {
       setInstalling(null);
@@ -67,7 +62,7 @@ export function DepsManagement() {
   const installAll = async () => {
     setInstallingAll(true);
     try {
-      await fetch('/v0/management/deps/install-all', { method: 'POST' });
+      await apiClient.post('/deps/install-all');
       await fetchDeps();
     } finally {
       setInstallingAll(false);
@@ -79,7 +74,6 @@ export function DepsManagement() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -96,7 +90,7 @@ export function DepsManagement() {
             重新检测
           </Button>
           {missing.length > 0 && (
-            <Button onClick={installAll} disabled={installingAll} variant="default">
+            <Button onClick={installAll} disabled={installingAll}>
               <Zap className="h-4 w-4 mr-2" />
               {installingAll ? '安装中...' : `一键安装全部 (${missing.length})`}
             </Button>
@@ -104,33 +98,16 @@ export function DepsManagement() {
         </div>
       </div>
 
-      {/* Summary Card */}
       <div className="grid grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-3xl font-bold">{summary.total}</div>
-            <div className="text-xs text-muted-foreground">总依赖</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-3xl font-bold text-green-500">{summary.installed}</div>
-            <div className="text-xs text-muted-foreground">已安装</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-3xl font-bold text-amber-500">{summary.missing}</div>
-            <div className="text-xs text-muted-foreground">缺失</div>
-          </CardContent>
-        </Card>
+        <Card><CardContent className="p-4 text-center"><div className="text-3xl font-bold">{summary.total}</div><div className="text-xs text-muted-foreground">总依赖</div></CardContent></Card>
+        <Card><CardContent className="p-4 text-center"><div className="text-3xl font-bold text-green-500">{summary.installed}</div><div className="text-xs text-muted-foreground">已安装</div></CardContent></Card>
+        <Card><CardContent className="p-4 text-center"><div className="text-3xl font-bold text-amber-500">{summary.missing}</div><div className="text-xs text-muted-foreground">缺失</div></CardContent></Card>
       </div>
 
       {error && (
         <div className="p-4 rounded-md bg-red-500/10 text-red-500 text-sm">{error}</div>
       )}
 
-      {/* 缺失的依赖 */}
       {missing.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
@@ -145,25 +122,16 @@ export function DepsManagement() {
                       <CardTitle className="text-base">{dep.name}</CardTitle>
                       <CardDescription className="mt-1">{dep.description}</CardDescription>
                     </div>
-                    <Badge variant="destructive" className="shrink-0">
-                      {categoryLabel[dep.category] || dep.category}
-                    </Badge>
+                    <Badge variant="destructive" className="shrink-0">{categoryLabel[dep.category] || dep.category}</Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-2">
                   <div className="flex items-center justify-between gap-2">
-                    <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate flex items-center gap-1">
-                      <Terminal className="h-3 w-3" />
+                    <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate">
                       {dep.installCommand}
                     </code>
-                    <Button
-                      size="sm"
-                      onClick={() => installOne(dep.key)}
-                      disabled={installing === dep.key}
-                    >
-                      {installing === dep.key ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                      ) : null}
+                    <Button size="sm" onClick={() => installOne(dep.key)} disabled={installing === dep.key}>
+                      {installing === dep.key ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
                       安装
                     </Button>
                   </div>
@@ -174,7 +142,6 @@ export function DepsManagement() {
         </div>
       )}
 
-      {/* 已安装的 */}
       {installed.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
@@ -188,30 +155,14 @@ export function DepsManagement() {
                     <span className="font-medium text-sm">{dep.name}</span>
                     <CheckCircle2 className="h-4 w-4 text-green-500" />
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {dep.version || 'OK'}
-                  </div>
+                  <div className="text-xs text-muted-foreground">{dep.version || 'OK'}</div>
                 </CardContent>
               </Card>
             ))}
           </div>
         </div>
       )}
-
-      {/* 底部说明 */}
-      <Card className="bg-muted/50">
-        <CardContent className="p-4 text-xs text-muted-foreground leading-relaxed">
-          <div className="font-medium text-foreground mb-1">关于依赖</div>
-          <ul className="list-disc pl-4 space-y-1">
-            <li><b>Qoder CLI</b>：通过 npm 全局安装，是本地 CLI 工具调用方式</li>
-            <li><b>Python 3</b> + <b>drissionpage</b>：workbuddy2api-hub 和 universal-web-api 的核心运行时</li>
-            <li><b>Chromium 浏览器</b>：universal-web-api 通过 DrissionPage 控制浏览器，接管已登录的 ChatGPT/豆包/Gemini/Claude/Kimi 等网页</li>
-            <li><b>自动安装</b>会执行系统命令，可能需要 sudo 或管理员权限</li>
-          </ul>
-        </CardContent>
-      </Card>
     </div>
   );
 }
-
 export default DepsManagement;
