@@ -21,6 +21,8 @@ import { ZaiAdapter, ZaiStreamHandler } from './adapters/zai'
 import { MiniMaxAdapter, MiniMaxStreamHandler } from './adapters/minimax'
 import { PerplexityAdapter } from './adapters/perplexity'
 import { PerplexityStreamHandler } from './adapters/perplexity-stream'
+import { QoderAdapter } from './adapters/qoder'
+import { WorkbuddyAdapter } from './adapters/workbuddy'
 import { ToolCallingEngine } from './toolCalling/ToolCallingEngine'
 import type { ToolCallingTransformResult } from './toolCalling/types'
 import { sessionManager } from './sessionManager'
@@ -110,6 +112,18 @@ export class RequestForwarder {
       matches: PerplexityAdapter.isPerplexityProvider,
       forward: (request, account, provider, actualModel, startTime) =>
         this.forwardPerplexity(request, account, provider, actualModel, startTime),
+    },
+    {
+      name: 'qoder',
+      matches: QoderAdapter.isQoderProvider,
+      forward: (request, account, provider, actualModel, startTime) =>
+        this.forwardQoder(request, account, provider, actualModel, startTime),
+    },
+    {
+      name: 'workbuddy',
+      matches: WorkbuddyAdapter.isWorkbuddyProvider,
+      forward: (request, account, provider, actualModel, startTime) =>
+        this.forwardWorkbuddy(request, account, provider, actualModel, startTime),
     },
   ]
 
@@ -1322,6 +1336,161 @@ export class RequestForwarder {
         body: result,
         latency,
         providerSessionId: sessionId,
+      }
+    } catch (error) {
+      const latency = Date.now() - startTime
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        latency,
+      }
+    }
+  }
+
+  /**
+   * Qoder Dedicated Forward
+   * 通过本地 qoderclicn / qodercli CLI 子进程处理请求
+   */
+  private async forwardQoder(
+    request: ChatCompletionRequest,
+    account: Account,
+    provider: Provider,
+    actualModel: string,
+    startTime: number
+  ): Promise<ForwardResult> {
+    console.log('[forwardQoder] actualModel:', actualModel, 'stream:', request.stream)
+    try {
+      const transformed = this.transformRequestForPromptToolUse(request, provider)
+      const adapter = new QoderAdapter(provider, account)
+
+      const { response, stream } = await adapter.chatCompletion({
+        model: actualModel,
+        originalModel: request.model,
+        messages: transformed.messages as any,
+        stream: request.stream,
+        tools: transformed.tools,
+        reasoning_effort: request.reasoning_effort,
+        max_tokens: request.max_tokens,
+      })
+
+      const latency = Date.now() - startTime
+
+      if (response.status >= 400) {
+        let errorMessage = `HTTP ${response.status}`
+        const d = (response as any).data
+        if (d) {
+          if (typeof d === 'string') errorMessage = d
+          else if (d.msg) errorMessage = d.msg
+          else if (d.error?.message) errorMessage = d.error.message
+        }
+        return {
+          success: false,
+          status: response.status,
+          error: errorMessage,
+          latency,
+        }
+      }
+
+      if (request.stream && stream) {
+        return {
+          success: true,
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+          stream: stream as any,
+          skipTransform: true,
+          latency,
+        }
+      }
+
+      // 非流式
+      const body = (response as any).data
+      this.applyToolCallsToResponse(body, transformed)
+      return {
+        success: true,
+        status: 200,
+        headers: {},
+        body,
+        latency,
+      }
+    } catch (error) {
+      const latency = Date.now() - startTime
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        latency,
+      }
+    }
+  }
+
+  /**
+   * WorkBuddy Dedicated Forward
+   * 转发请求到内置的 workbuddy2api-hub Python 子服务
+   */
+  private async forwardWorkbuddy(
+    request: ChatCompletionRequest,
+    account: Account,
+    provider: Provider,
+    actualModel: string,
+    startTime: number
+  ): Promise<ForwardResult> {
+    console.log('[forwardWorkbuddy] actualModel:', actualModel, 'stream:', request.stream)
+    try {
+      const transformed = this.transformRequestForPromptToolUse(request, provider)
+      const adapter = new WorkbuddyAdapter(provider, account)
+
+      const { response } = await adapter.chatCompletion({
+        model: actualModel,
+        originalModel: request.model,
+        messages: transformed.messages as any,
+        stream: request.stream,
+        tools: transformed.tools,
+        tool_choice: request.tool_choice,
+        temperature: request.temperature,
+        reasoning_effort: request.reasoning_effort,
+        max_tokens: request.max_tokens,
+      })
+
+      const latency = Date.now() - startTime
+
+      if (response.status >= 400) {
+        let errorMessage = `HTTP ${response.status}`
+        if (response.data) {
+          if (typeof response.data === 'string') {
+            errorMessage = response.data.slice(0, 500)
+          } else if (response.data.msg) {
+            errorMessage = response.data.msg
+          } else if (response.data.error?.message) {
+            errorMessage = response.data.error.message
+          }
+        }
+        return {
+          success: false,
+          status: response.status,
+          error: errorMessage,
+          latency,
+        }
+      }
+
+      if (request.stream) {
+        return {
+          success: true,
+          status: response.status,
+          headers: this.extractHeaders(response.headers),
+          stream: response.data,
+          skipTransform: true,
+          latency,
+        }
+      }
+
+      // 非流式
+      const body = response.data
+      this.applyToolCallsToResponse(body, transformed)
+      return {
+        success: true,
+        status: response.status,
+        headers: this.extractHeaders(response.headers),
+        body,
+        latency,
       }
     } catch (error) {
       const latency = Date.now() - startTime
