@@ -31,6 +31,7 @@ const navItems: NavItem[] = [
   { titleKey: 'nav.apiKeys', href: '/api-keys', icon: Key },
   { titleKey: 'nav.logs', href: '/logs', icon: FileText },
   { titleKey: 'nav.settings', href: '/settings', icon: Settings },
+  { titleKey: 'nav.deps', href: '/deps', icon: Package },
   { titleKey: 'nav.about', href: '/about', icon: Info },
 ]
 

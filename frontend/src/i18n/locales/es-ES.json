@@ -18,7 +18,8 @@
     "session": "Sesión",
     "settings": "Ajustes",
     "about": "Acerca de",
-    "menu": "Menú"
+    "menu": "Menú",
+    "deps": "Dependencies"
   },
   "dashboard": {
     "title": "Panel",

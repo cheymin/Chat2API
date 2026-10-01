@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { AuthProvider } from '@/components/auth/AuthProvider'
 
 const Dashboard = lazy(() => import('@/pages/Dashboard').then(m => ({ default: m.Dashboard })))
+const DepsManagement = lazy(() => import('@/pages/DepsManagement').then(m => ({ default: m.DepsManagement })))
 const Providers = lazy(() => import('@/pages/Providers').then(m => ({ default: m.Providers })))
 const ProxySettings = lazy(() => import('@/pages/ProxySettings').then(m => ({ default: m.ProxySettings })))
 const Models = lazy(() => import('@/pages/Models').then(m => ({ default: m.Models })))
@@ -41,6 +42,7 @@ function App() {
           <Route path="/logs" element={<Suspense fallback={<PageLoader />}><Logs /></Suspense>} />
           <Route path="/session" element={<Suspense fallback={<PageLoader />}><SessionManagement /></Suspense>} />
           <Route path="/settings" element={<Suspense fallback={<PageLoader />}><Settings /></Suspense>} />
+          <Route path="/deps" element={<Suspense fallback={<PageLoader />}><DepsManagement /></Suspense>} />
           <Route path="/about" element={<Suspense fallback={<PageLoader />}><About /></Suspense>} />
         </Route>
       </Routes>

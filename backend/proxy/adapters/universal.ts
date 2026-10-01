@@ -172,7 +172,25 @@ export class UniversalAdapter {
   }
 
   static isUniversalProvider(provider: Provider): boolean {
-    return provider.id === 'universal' || provider.apiEndpoint?.includes('18199')
+    const ids = ['universal', 'chatgpt', 'doubao', 'gemini', 'claude', 'kimiWeb', 'qwenWeb', 'grok', 'aiStudio', 'arena'];
+    return ids.includes(provider.id) || provider.apiEndpoint?.includes('18199');
+  }
+
+  /** 根据 provider ID 解析目标站点域名 */
+  private resolveSiteDomain(): string | undefined {
+    const siteMap: Record<string, string> = {
+      'chatgpt': 'chatgpt.com',
+      'doubao': 'www.doubao.com',
+      'gemini': 'gemini.google.com',
+      'claude': 'claude.ai',
+      'kimiWeb': 'www.kimi.com',
+      'qwenWeb': 'chat.qwen.ai',
+      'grok': 'grok.com',
+      'aiStudio': 'aistudio.google.com',
+      'arena': 'arena.ai',
+    };
+    const c = this.account.credentials as any;
+    return c.site || siteMap[this.provider.id];
   }
 
   private getProcessKey(): string {
@@ -192,11 +210,13 @@ export class UniversalAdapter {
     }
     if (c.apiKey) headers['x-api-key'] = c.apiKey
 
+    const site = this.resolveSiteDomain();
     const body: any = {
       model: request.model,
       messages: request.messages,
       stream: request.stream || false,
-    }
+    };
+    if (site) body.site = site;  // universal-web-api 支持 ?site= 参数路由
     if (request.temperature !== undefined) body.temperature = request.temperature
     if (request.tools !== undefined) body.tools = request.tools
     if (request.tool_choice !== undefined) body.tool_choice = request.tool_choice

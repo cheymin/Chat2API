@@ -18,7 +18,8 @@
     "session": "Session",
     "settings": "Settings",
     "about": "About",
-    "menu": "Menu"
+    "menu": "Menu",
+    "deps": "Dependencies"
   },
   "dashboard": {
     "title": "Dashboard",

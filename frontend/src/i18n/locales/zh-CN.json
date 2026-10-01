@@ -18,7 +18,8 @@
     "session": "会话管理",
     "settings": "设置",
     "about": "关于",
-    "menu": "菜单"
+    "menu": "菜单",
+    "deps": "依赖管理"
   },
   "dashboard": {
     "title": "仪表盘",

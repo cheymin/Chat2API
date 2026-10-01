@@ -18,6 +18,7 @@ import oauthRouter from './oauth/index'
 import logsRouter from './logs'
 import promptsRouter from './prompts'
 import appRouter from './app'
+import depsRouter from './deps'
 
 export {
   authRouter,
@@ -35,6 +36,7 @@ export {
   logsRouter,
   promptsRouter,
   appRouter,
+  depsRouter,
 }
 
 export default [
@@ -60,4 +62,5 @@ export default [
   logsRouter,
   promptsRouter,
   appRouter,
+  depsRouter,
 ]
