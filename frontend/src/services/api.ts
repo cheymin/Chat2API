@@ -286,5 +286,12 @@ export const ApiService = {
   contextManagement: {
     getConfig: () => apiClient.get('/config').then(res => (res as any).contextManagement),
     updateConfig: (updates: any) => apiClient.put('/config', { contextManagement: updates }).then(res => (res as any).contextManagement),
+  },
+
+  // Dependencies
+  deps: {
+    check: () => apiClient.get('/deps/check'),
+    installAll: () => apiClient.post('/deps/install-all'),
+    install: (key: string) => apiClient.post('/deps/install/' + key),
   }
 }

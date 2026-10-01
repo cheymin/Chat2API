@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Package, CheckCircle2, XCircle, Loader2, RefreshCw, Zap } from 'lucide-react';
-import { apiClient } from '@/services/api';
+import { ApiService } from '@/services/api';
 
 interface DepItem {
   name: string;
@@ -37,7 +37,7 @@ export function DepsManagement() {
     setLoading(true);
     setError(null);
     try {
-      const data: any = await apiClient.get('/deps/check');
+      const data: any = await ApiService.deps.check();
       setDeps(data.deps);
       setSummary(data.summary);
     } catch (e: any) {
@@ -62,7 +62,7 @@ export function DepsManagement() {
   const installAll = async () => {
     setInstallingAll(true);
     try {
-      await apiClient.post('/deps/install-all');
+      await ApiService.deps.installAll();
       await fetchDeps();
     } finally {
       setInstallingAll(false);
