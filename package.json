@@ -13,7 +13,7 @@
     "dev:backend": "ts-node --project tsconfig.backend.json backend/index.ts",
     "dev:frontend": "vite",
     "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "build:backend": "tsc --project tsconfig.backend.json",
+    "build:backend": "tsc --project tsconfig.backend.json && cp -r backend/third_party dist/backend/third_party 2>/dev/null || true",
     "build:frontend": "vite build",
     "build": "npm run build:backend && npm run build:frontend",
     "start": "node dist/backend/index.js",

@@ -4,9 +4,11 @@ import kimiConfig from './kimi'
 import minimaxConfig from './minimax'
 import mimoConfig from './mimo'
 import perplexityConfig from './perplexity'
+import qoderConfig from './qoder'
 import qwenConfig from './qwen'
 import qwenAiConfig from './qwen-ai'
 import veniceConfig from './venice'
+import workbuddyConfig from './workbuddy'
 import zaiConfig from './zai'
 import type { BuiltinProviderConfig } from '../../store/types'
 
@@ -17,9 +19,11 @@ export const builtinProviders: BuiltinProviderConfig[] = [
   minimaxConfig,
   mimoConfig,
   perplexityConfig,
+  qoderConfig,
   qwenConfig,
   qwenAiConfig,
   veniceConfig,
+  workbuddyConfig,
   zaiConfig,
 ]
 
@@ -30,9 +34,11 @@ export const builtinProviderMap: Record<string, BuiltinProviderConfig> = {
   minimax: minimaxConfig,
   mimo: mimoConfig,
   perplexity: perplexityConfig,
+  qoder: qoderConfig,
   qwen: qwenConfig,
   'qwen-ai': qwenAiConfig,
   venice: veniceConfig,
+  workbuddy: workbuddyConfig,
   zai: zaiConfig,
 }
 
@@ -51,9 +57,11 @@ export {
   minimaxConfig,
   mimoConfig,
   perplexityConfig,
+  qoderConfig,
   qwenConfig,
   qwenAiConfig,
   veniceConfig,
+  workbuddyConfig,
   zaiConfig,
 }
 
