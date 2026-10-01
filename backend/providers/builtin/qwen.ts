@@ -16,11 +16,12 @@ export const qwenConfig: BuiltinProviderConfig = {
   enabled: true,
   description: 'Qwen AI assistant by Alibaba Cloud (www.qianwen.com)',
   supportedModels: [
-    'Qwen3.6',
+    'Qwen3.8-Max',
     'Qwen3.7-Max',
+    'Qwen3.7-Plus',
+    'Qwen3.6',
     'Qwen3.5-Flash',
     'Qwen3-Max',
-    'Qwen3-Max-Thinking-Preview',
     'Qwen3-Coder',
   ],
   modelMappings: {

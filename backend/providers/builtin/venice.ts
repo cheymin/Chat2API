@@ -73,7 +73,10 @@ export const veniceProvider: BuiltinProviderConfig = {
   description: 'Venice AI via web interface ($18/mo unlimited). Requires JWT + cookies from browser session.',
   supportedModels: [
     'GLM 5.2',
+    'GLM 5.3',
     'DeepSeek V4 Flash',
+    'DeepSeek V4 Pro',
+    'Qwen3.8 Max Uncensored',
     'Qwen3.6 35B A3B Uncensored',
     'GPT OSS 120B',
   ],

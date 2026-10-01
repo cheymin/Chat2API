@@ -23,6 +23,7 @@ import { PerplexityAdapter } from './adapters/perplexity'
 import { PerplexityStreamHandler } from './adapters/perplexity-stream'
 import { VeniceAdapter, VeniceStreamHandler } from './adapters/venice'
 import { QoderAdapter } from './adapters/qoder'
+import { UniversalAdapter } from './adapters/universal'
 import { WorkbuddyAdapter } from './adapters/workbuddy'
 import { ToolCallingEngine } from './toolCalling/ToolCallingEngine'
 import type { ToolCallingTransformResult } from './toolCalling/types'
@@ -131,6 +132,12 @@ export class RequestForwarder {
       matches: WorkbuddyAdapter.isWorkbuddyProvider,
       forward: (request, account, provider, actualModel, startTime) =>
         this.forwardWorkbuddy(request, account, provider, actualModel, startTime),
+    },
+    {
+      name: 'universal',
+      matches: UniversalAdapter.isUniversalProvider,
+      forward: (request, account, provider, actualModel, startTime) =>
+        this.forwardUniversal(request, account, provider, actualModel, startTime),
     },
   ]
 
@@ -1903,6 +1910,60 @@ export class RequestForwarder {
     }
   }
 
+
+  /**
+   * Universal Web API Dedicated Forward
+   * 转发请求到内置的 universal-web-api Python 子服务
+   */
+  private async forwardUniversal(
+    request: ChatCompletionRequest,
+    account: Account,
+    provider: Provider,
+    actualModel: string,
+    startTime: number
+  ): Promise<ForwardResult> {
+    console.log('[forwardUniversal] actualModel:', actualModel, 'stream:', request.stream);
+    try {
+      const transformed = this.transformRequestForPromptToolUse(request, provider);
+      const adapter = new UniversalAdapter(provider, account);
+      const { response } = await adapter.chatCompletion({
+        model: actualModel, messages: transformed.messages as any,
+        stream: request.stream, tools: transformed.tools,
+        tool_choice: request.tool_choice, temperature: request.temperature,
+        max_tokens: request.max_tokens,
+      });
+      const latency = Date.now() - startTime;
+      if (response.status >= 400) {
+        let msg = 'HTTP ' + response.status;
+        if (response.data) {
+          if (typeof response.data === 'string') msg = response.data.slice(0, 500);
+          else if ((response.data as any).msg) msg = (response.data as any).msg;
+          else if ((response.data as any).error?.message) msg = (response.data as any).error.message;
+        }
+        return { success: false, status: response.status, error: msg, latency };
+      }
+      if (request.stream) {
+        return {
+          success: true, status: response.status,
+          headers: this.extractHeaders(response.headers),
+          stream: response.data, skipTransform: true, latency,
+        };
+      }
+      const body = response.data;
+      this.applyToolCallsToResponse(body, transformed);
+      return {
+        success: true, status: response.status,
+        headers: this.extractHeaders(response.headers),
+        body, latency,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        latency: Date.now() - startTime,
+      };
+    }
+  }
 }
 
 export const requestForwarder = new RequestForwarder()

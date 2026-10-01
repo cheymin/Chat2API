@@ -29,6 +29,7 @@ export const mimoConfig: BuiltinProviderConfig = {
     'MiMo-V2.5-Pro',
     'MiMo-V2.5',
     'MiMo-V2-Flash',
+    'MiMo-V1.5-Pro',
   ],
   modelMappings: {
     'MiMo-V2.5-Pro': 'mimo-v2.5-pro',

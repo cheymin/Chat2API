@@ -34,7 +34,15 @@ export const deepseekConfig: BuiltinProviderConfig = {
   enabled: true,
   description: 'DeepSeek AI assistant, supports deep thinking and web search',
   // Models updated per HAR 2026-09-05: default=快速模式, expert=专家模式, vision=识图模式(new)
-  supportedModels: ['deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-vision'],
+  supportedModels: [
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
+    'deepseek-v4.1-flash',
+    'deepseek-v4.1-pro',
+    'deepseek-v4-thinking',
+    'deepseek-chat',
+    'deepseek-reasoner',
+  ],
   modelMappings: {
     'deepseek-v4-flash': 'deepseek-v4-flash',   // -> model_type: default (快速模式)
     'deepseek-v4-pro': 'deepseek-v4-pro',         // -> model_type: expert (专家模式)

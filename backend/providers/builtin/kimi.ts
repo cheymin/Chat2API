@@ -27,6 +27,10 @@ export const kimiConfig: BuiltinProviderConfig = {
   enabled: true,
   description: 'Kimi K2.6 AI assistant by Moonshot, supports thinking mode and web search',
   supportedModels: [
+    'Kimi-K3',
+    'Kimi-K3-Thinking',
+    'Kimi-K2.8-Preview',
+    'Kimi-K2.7-Code',
     'Kimi-K2.6',
   ],
   modelMappings: {

@@ -1,0 +1,131 @@
+"""
+app/api/deps.py - API 共享依赖
+"""
+
+import hmac
+from typing import Iterable, Optional
+
+from fastapi import Header, HTTPException, Request
+
+from app.core.config import AppConfig
+from app.core.http_security import is_trusted_local_request
+
+
+def extract_authorization_token(authorization: Optional[str]) -> str:
+    """Extract a token from Authorization, accepting raw tokens and Bearer schemes."""
+    raw = str(authorization or "").strip()
+    if raw.lower().startswith("bearer "):
+        return raw[7:].strip()
+    return raw
+
+
+def _auth_candidates(
+    authorization: Optional[str],
+    x_api_key: Optional[str] = None,
+) -> list[str]:
+    candidates: list[str] = []
+    if isinstance(authorization, str) and authorization.strip():
+        raw = authorization.strip()
+        candidates.append(raw)
+        extracted = extract_authorization_token(raw)
+        if extracted and extracted != raw:
+            candidates.append(extracted)
+    if isinstance(x_api_key, str) and x_api_key.strip():
+        candidates.append(x_api_key.strip())
+    return candidates
+
+
+def _verify_token_candidates(
+    *,
+    enabled: bool,
+    token_value: str,
+    candidates: Iterable[str],
+) -> None:
+    if not enabled:
+        return
+
+    expected = str(token_value or "").strip()
+    if not expected:
+        raise HTTPException(status_code=500, detail="服务配置错误")
+
+    normalized = [str(item or "").strip() for item in candidates if str(item or "").strip()]
+    if not normalized:
+        raise HTTPException(
+            status_code=401,
+            detail="未提供认证令牌",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # 修复6: str 版 compare_digest 遇到非 ASCII 令牌会抛 TypeError 导致 500，统一按 UTF-8 编码后比较
+    expected_bytes = expected.encode("utf-8")
+    if not any(
+        hmac.compare_digest(expected_bytes, candidate.encode("utf-8"))
+        for candidate in normalized
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="认证令牌无效",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+def verify_service_token(
+    authorization: Optional[str] = None,
+    x_api_key: Optional[str] = None,
+) -> None:
+    _verify_token_candidates(
+        enabled=AppConfig.is_auth_enabled(),
+        token_value=AppConfig.get_auth_token(),
+        candidates=_auth_candidates(authorization, x_api_key),
+    )
+
+
+def verify_dashboard_token(authorization: Optional[str] = None) -> None:
+    _verify_token_candidates(
+        enabled=AppConfig.is_dashboard_auth_enabled(),
+        token_value=AppConfig.get_dashboard_auth_token(),
+        candidates=_auth_candidates(authorization),
+    )
+
+
+async def verify_service_auth(
+    authorization: Optional[str] = Header(None),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+) -> bool:
+    """验证对外服务 API 的 Bearer Token 或 X-API-Key。"""
+    verify_service_token(authorization=authorization, x_api_key=x_api_key)
+    return True
+
+
+async def verify_dashboard_auth(authorization: Optional[str] = Header(None)) -> bool:
+    """验证控制面板管理接口的访问密钥。"""
+    verify_dashboard_token(authorization=authorization)
+    return True
+
+
+async def verify_auth(authorization: Optional[str] = Header(None)) -> bool:
+    """向后兼容：默认用于控制面板管理接口。"""
+    return await verify_dashboard_auth(authorization)
+
+
+async def verify_sensitive_admin_auth(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+) -> bool:
+    """高敏感管理接口（完整备份导出/导入、打开受控浏览器等）的鉴权。
+
+    - 控制面板认证已启用：必须提供有效令牌（与 verify_dashboard_auth 相同）；
+    - 未启用：不再无条件放行，只接受「直接来自本机回环、未经反代/隧道转发」的请求，
+      其余一律 403，并提示启用 DASHBOARD_AUTH_*。（审查条目 S13 / S4）
+    """
+    if AppConfig.is_dashboard_auth_enabled():
+        verify_dashboard_token(authorization=authorization)
+        return True
+
+    client_host = request.client.host if request.client else None
+    if is_trusted_local_request(client_host, request.headers):
+        return True
+    raise HTTPException(
+        status_code=403,
+        detail="该接口仅允许本机直接访问；远程访问请先启用控制面板认证（DASHBOARD_AUTH_ENABLED / DASHBOARD_AUTH_TOKEN）",
+    )

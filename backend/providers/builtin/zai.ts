@@ -27,6 +27,7 @@ export const zaiConfig: BuiltinProviderConfig = {
   supportedModels: [
     'GLM-5.3',
     'GLM-5.3-Flash',
+    'GLM-5.2',
   ],
   modelMappings: {
     'GLM-5.3': 'glm-5.3',

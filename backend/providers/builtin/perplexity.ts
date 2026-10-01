@@ -22,11 +22,15 @@ export const perplexityConfig: BuiltinProviderConfig = {
   supportedModels: [
     'Auto',
     'PPLX-Pro',
+    'PPLX-Sonar-Pro',
+    'PPLX-Sonar',
     'GPT-5',
+    'GPT-4.5',
     'Gemini-2.5-Pro',
     'Claude-Sonnet-4',
     'Claude-Opus-4',
     'Nemotron',
+    'Grok-4',
   ],
   modelMappings: {
     'Auto': 'turbo',

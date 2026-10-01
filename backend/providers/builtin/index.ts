@@ -7,6 +7,7 @@ import perplexityConfig from './perplexity'
 import qoderConfig from './qoder'
 import qwenConfig from './qwen'
 import qwenAiConfig from './qwen-ai'
+import universalConfig from './universal'
 import veniceConfig from './venice'
 import workbuddyConfig from './workbuddy'
 import zaiConfig from './zai'
@@ -22,6 +23,7 @@ export const builtinProviders: BuiltinProviderConfig[] = [
   qoderConfig,
   qwenConfig,
   qwenAiConfig,
+  universalConfig,
   veniceConfig,
   workbuddyConfig,
   zaiConfig,
@@ -37,6 +39,7 @@ export const builtinProviderMap: Record<string, BuiltinProviderConfig> = {
   qoder: qoderConfig,
   qwen: qwenConfig,
   'qwen-ai': qwenAiConfig,
+  universal: universalConfig,
   venice: veniceConfig,
   workbuddy: workbuddyConfig,
   zai: zaiConfig,
@@ -60,6 +63,7 @@ export {
   qoderConfig,
   qwenConfig,
   qwenAiConfig,
+  universalConfig,
   veniceConfig,
   workbuddyConfig,
   zaiConfig,

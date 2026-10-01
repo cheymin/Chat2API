@@ -38,7 +38,12 @@ export const glmConfig: BuiltinProviderConfig = {
   // Reasoning level is sent separately through `reasoning_effort`.
   supportedModels: [
     'GLM-5.3',
-    'GLM-Flash',
+    'GLM-5.3-Pro',
+    'GLM-5.3-Flash',
+    'GLM-5.2',
+    'GLM-5.2-Flash',
+    'GLM-4.6',
+    'GLM-4.5',
   ],
   modelMappings: {
     'GLM-5.3': 'glm-5.3',

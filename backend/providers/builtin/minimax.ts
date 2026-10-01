@@ -27,7 +27,9 @@ export const minimaxConfig: BuiltinProviderConfig = {
   description: 'MiniMax Agent - AI assistant with MCP multi-agent collaboration',
   supportedModels: [
     'MiniMax-M3',
+    'MiniMax-M3-Thinking',
     'MiniMax-M2.7',
+    'MiniMax-M2',
   ],
   modelMappings: {
     'MiniMax-M3': 'MiniMax-M3',

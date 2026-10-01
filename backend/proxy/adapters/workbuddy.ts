@@ -249,6 +249,13 @@ export class WorkbuddyAdapter {
     return provider.id === 'workbuddy' || provider.apiEndpoint?.includes('18788')
   }
 
+  /** 启动或获取子进程（公开给 OAuth 方法） */
+  async getOrStartWbSubprocess(
+    opts: { realm?: string; pythonPath?: string; apiKey?: string }
+  ): Promise<{ port: number; baseUrl: string }> {
+    return this.processManager.ensureStarted(this.getProcessKey(), opts);
+  }
+
   private getProcessKey(): string {
     // 同一 account 使用同一子服务（workbuddy 子服务管理自己的账号池）
     return `wb-${this.account.id}`
@@ -301,6 +308,37 @@ export class WorkbuddyAdapter {
       response,
       conversationId: '', // workbuddy 无显式会话 ID
     }
+  }
+
+  async startLogin(realm?: string, platform?: string): Promise<any> {
+    const c = this.account.credentials as any;
+    const { baseUrl } = await this.getOrStartWbSubprocess({ realm: realm || c.realm, pythonPath: c.pythonPath, apiKey: c.apiKey });
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (c.apiKey) headers['Authorization'] = `Bearer ${c.apiKey}`;
+    const res = await axios.post(`${baseUrl}/accounts/login/start`, { realm: realm || c.realm || 'intl', platform: platform || 'Web' }, { headers, timeout: 30000 });
+    return res.data;
+  }
+  async pollLogin(state: string): Promise<any> {
+    const c = this.account.credentials as any;
+    const { baseUrl } = await this.getOrStartWbSubprocess({ realm: c.realm, pythonPath: c.pythonPath, apiKey: c.apiKey });
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (c.apiKey) headers['Authorization'] = `Bearer ${c.apiKey}`;
+    const res = await axios.post(`${baseUrl}/accounts/login/poll`, { state }, { headers, timeout: 30000 });
+    return res.data;
+  }
+  async cancelLogin(state: string): Promise<any> {
+    const c = this.account.credentials as any;
+    const { baseUrl } = await this.getOrStartWbSubprocess({ realm: c.realm, pythonPath: c.pythonPath, apiKey: c.apiKey });
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (c.apiKey) headers['Authorization'] = `Bearer ${c.apiKey}`;
+    const res = await axios.post(`${baseUrl}/accounts/login/cancel`, { state }, { headers, timeout: 30000 });
+    return res.data;
+  }
+  async getHealth(): Promise<{ healthy: boolean; baseUrl: string; dashboardUrl: string }> {
+    const c = this.account.credentials as any;
+    const { baseUrl } = await this.getOrStartWbSubprocess({ realm: c.realm, pythonPath: c.pythonPath, apiKey: c.apiKey });
+    try { await axios.get(`${baseUrl}/health`, { timeout: 5000 }); return { healthy: true, baseUrl, dashboardUrl: baseUrl }; }
+    catch { return { healthy: false, baseUrl, dashboardUrl: baseUrl }; }
   }
 }
 

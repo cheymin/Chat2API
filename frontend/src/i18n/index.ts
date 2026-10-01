@@ -36,11 +36,11 @@ function getInitialLanguage(): string {
     // ignore parse errors
   }
 
-  // Fallback: detect from browser navigator
+  // 默认中文，再根据浏览器语言判断
   const navLang = navigator.language || ''
-  if (navLang.startsWith('zh')) return 'zh-CN'
+  if (navLang.startsWith('en')) return 'en-US'
   if (navLang.startsWith('es')) return 'es-ES'
-  return 'en-US'
+  return 'zh-CN'
 }
 
 i18n
@@ -48,7 +48,7 @@ i18n
   .init({
     resources,
     lng: getInitialLanguage(),
-    fallbackLng: 'en-US',
+    fallbackLng: 'zh-CN',
     debug: false,
     interpolation: {
       escapeValue: false,

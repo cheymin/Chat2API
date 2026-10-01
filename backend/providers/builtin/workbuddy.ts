@@ -90,11 +90,11 @@ export const workbuddyConfig: BuiltinProviderConfig = {
     },
     {
       name: 'apiKey',
-      label: 'API Key（可选）',
+      label: '子服务 API Key（可选）',
       type: 'password',
       required: false,
       placeholder: '留空自动生成',
-      helpText: 'workbuddy 子服务的 API Key，留空则不校验；建议填写',
+      helpText: 'workbuddy2api-hub 子服务的 API Key，建议填写',
     },
     {
       name: 'pythonPath',

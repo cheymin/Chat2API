@@ -1,0 +1,357 @@
+"""
+app/services/arena_tab_listener.py - Arena 翻牌探测与结果桥接扩展监听器
+
+从通用全局网络拦截层解耦的独立扩展模块。
+通过 register_response_listener 挂载到 _GlobalNetworkInterceptionManager，
+实现对 Arena 候选响应的事件桥接与前端 React Fiber store 的翻牌轮询。
+"""
+
+import threading
+import time
+from typing import Any, Callable, Dict, Optional, Set
+
+from app.core.config import logger
+from app.core.page_lifecycle import is_page_refresh_error
+from app.core.tab_pool_parts.session import TabSession
+
+
+def is_explicit_arena_direct_url(url: Any) -> bool:
+    """Check if URL explicitly points to Arena direct chat page."""
+    try:
+        raw = str(url or "").strip()
+        if not raw:
+            return False
+        from urllib.parse import parse_qs, urlparse
+        parsed = urlparse(raw)
+        path = (parsed.path or "").rstrip("/").lower()
+        if path in {"/direct", "/text/direct", "/image/direct", "/code/direct", "/search/direct"}:
+            return True
+        if path.startswith(("/direct/", "/text/direct/", "/image/direct/", "/code/direct/", "/search/direct/")):
+            return True
+        if path.endswith("/direct"):
+            return True
+        query = parse_qs(parsed.query)
+        if query.get("mode") == ["direct"]:
+            return True
+        return False
+    except Exception:
+        return False
+
+
+from app.core.tab_pool_parts._arena_snapshot import (
+    _ARENA_STORE_SNAPSHOT_JS,
+    _ARENA_STORE_SNAPSHOT_JSON_JS,
+)
+from app.core.cdp_hygiene import decode_js_json
+from app.core.tab_pool_parts.idle_maintenance import note_network_activity
+
+
+class ArenaTabListener:
+    """Arena 翻牌探测与结果桥接监听器。"""
+
+    ARENA_REVEAL_POLL_INTERVAL_SEC = 3.0
+    ARENA_REVEAL_POLL_TIMEOUT_SEC = 120.0
+    RESULT_BRIDGE_MAX_ACTIVE_PER_SESSION = 2
+
+    def __init__(
+        self,
+        get_session_fn: Optional[Callable[[str], Optional[TabSession]]] = None,
+        is_shutdown_fn: Optional[Callable[[], bool]] = None,
+    ):
+        self._get_session = get_session_fn
+        self._is_shutdown = is_shutdown_fn or (lambda: False)
+        self._result_event_handler = self._create_result_event_handler()
+        self._result_bridge_lock = threading.RLock()
+        self._result_bridge_active_by_session: Dict[str, int] = {}
+        self._arena_reveal_pollers: Dict[str, threading.Thread] = {}
+        self._arena_reveal_lock = threading.RLock()
+        self._arena_reveal_logged_signatures: Set[str] = set()
+
+    @staticmethod
+    def _create_result_event_handler():
+        try:
+            from app.services.result_event_bridge import create_result_event_handler
+            handler = create_result_event_handler()
+            if handler:
+                logger.info("[GlobalNet] Arena 结果事件桥接已启用（支持手动网页测试）")
+            return handler
+        except Exception as e:
+            logger.debug(f"[GlobalNet] Arena 结果事件桥接初始化失败（忽略）: {e}")
+            return None
+
+    @staticmethod
+    def is_arena_candidate(event: Dict[str, Any]) -> bool:
+        """快速判断事件是否可能属于 Arena。"""
+        url = str((event or {}).get("url") or "").strip().lower()
+        if not url:
+            return False
+        return any(host in url for host in ("lmarena.ai", "arena.ai", "lmsys.org"))
+
+    @classmethod
+    def _is_result_bridge_candidate(cls, event: Dict[str, Any]) -> bool:
+        if not cls.is_arena_candidate(event):
+            return False
+        url = str((event or {}).get("url") or "").strip().lower()
+        return any(
+            token in url
+            for token in (
+                "/nextjs-api/stream/",
+                "nextjs-api/stream",
+                "create-evaluation",
+                "post-to-evaluation",
+                "stream/create",
+                "stream/post",
+            )
+        )
+
+    @classmethod
+    def _is_reveal_snapshot_candidate(cls, event: Dict[str, Any]) -> bool:
+        if not cls.is_arena_candidate(event):
+            return False
+        url = str((event or {}).get("url") or "").strip().lower()
+        return any(
+            token in url
+            for token in (
+                "/nextjs-api/stream/",
+                "/rpc/i/",
+                "/api/history/",
+                "/c/",
+                "_rsc=",
+            )
+        )
+
+    def _claim_result_bridge_slot(self, session_id: str) -> bool:
+        key = str(session_id or "unknown")
+        with self._result_bridge_lock:
+            active = int(self._result_bridge_active_by_session.get(key, 0) or 0)
+            if active >= self.RESULT_BRIDGE_MAX_ACTIVE_PER_SESSION:
+                logger.debug_throttled(
+                    f"global_net.result_bridge_busy.{key}",
+                    f"[GlobalNet] Arena 结果桥接忙，跳过候选响应: {key}, active={active}",
+                    interval_sec=10.0,
+                )
+                return False
+            self._result_bridge_active_by_session[key] = active + 1
+            return True
+
+    def _release_result_bridge_slot(self, session_id: str) -> None:
+        key = str(session_id or "unknown")
+        with self._result_bridge_lock:
+            active = int(self._result_bridge_active_by_session.get(key, 0) or 0)
+            if active <= 1:
+                self._result_bridge_active_by_session.pop(key, None)
+            else:
+                self._result_bridge_active_by_session[key] = active - 1
+
+    def _dispatch_result_bridge_async(
+        self,
+        session: TabSession,
+        response: Any,
+        event: Dict[str, Any],
+        stop_event: threading.Event,
+    ) -> None:
+        if not self._result_event_handler:
+            return
+        if not self._is_result_bridge_candidate(event):
+            return
+
+        session_id = str(getattr(session, "id", "") or "unknown")
+        if not self._claim_result_bridge_slot(session_id):
+            return
+
+        try:
+            thread = threading.Thread(
+                target=self._dispatch_result_bridge,
+                args=(session, response, dict(event or {}), stop_event),
+                daemon=True,
+                name=f"global-net-arena-{session_id}",
+            )
+            thread.start()
+        except Exception as e:
+            self._release_result_bridge_slot(session_id)
+            logger.debug(f"[GlobalNet] Arena 结果桥接线程启动失败（忽略）: {e}")
+
+    def _dispatch_result_bridge(
+        self,
+        session: TabSession,
+        response: Any,
+        event: Dict[str, Any],
+        stop_event: threading.Event,
+    ) -> None:
+        session_id = str(getattr(session, "id", "") or "unknown")
+        try:
+            from app.core.tab_pool_parts.network import _GlobalNetworkInterceptionManager
+            raw_body, raw_body_source = _GlobalNetworkInterceptionManager.read_response_body(response, stop_event)
+            if not raw_body:
+                return
+
+            post_data = _GlobalNetworkInterceptionManager.extract_request_post_data(response)
+            self._result_event_handler(
+                {
+                    "event": event,
+                    "raw_body": raw_body,
+                    "raw_body_source": raw_body_source,
+                    "request_post_data": post_data,
+                    "parse_result": {"done": True},
+                    "parser_id": "lmarena_global",
+                    "session_id": getattr(session, "id", ""),
+                    "session": session,
+                }
+            )
+        except Exception as e:
+            logger.debug(f"[GlobalNet] Arena 结果事件桥接失败（忽略）: {e}")
+        finally:
+            self._release_result_bridge_slot(session_id)
+
+    def _start_arena_reveal_poll(
+        self,
+        session: TabSession,
+        event: Dict[str, Any],
+        stop_event: threading.Event,
+        reason: str,
+    ) -> None:
+        if not session or not self._is_reveal_snapshot_candidate(event):
+            return
+        session_id = str(getattr(session, "id", "") or "")
+        if not session_id:
+            return
+
+        try:
+            from app.core.workflow.arena_direct_guard import is_arena_direct_preset
+            tab = getattr(session, "tab", None)
+            current_url = getattr(tab, "url", "") if tab else ""
+            if current_url and is_explicit_arena_direct_url(current_url):
+                return
+            preset_name = str(getattr(session, "preset_name", "") or getattr(session, "preset", "") or "")
+            if preset_name and is_arena_direct_preset("arena.ai", preset_name):
+                return
+        except Exception:
+            pass
+
+        with self._arena_reveal_lock:
+            current = self._arena_reveal_pollers.get(session_id)
+            if current and current.is_alive():
+                return
+            thread = threading.Thread(
+                target=self._arena_reveal_poll_loop,
+                args=(session_id, stop_event, reason),
+                daemon=True,
+                name=f"global-net-reveal-{session_id}",
+            )
+            self._arena_reveal_pollers[session_id] = thread
+            thread.start()
+
+    def _arena_reveal_poll_loop(
+        self,
+        session_id: str,
+        stop_event: threading.Event,
+        reason: str,
+    ) -> None:
+        try:
+            from app.services.result_event_bridge import emit_arena_snapshot_event
+        except Exception as e:
+            logger.debug(f"[GlobalNet] Arena 翻牌快照桥接不可用（忽略）: {e}")
+            return
+
+        deadline = time.time() + self.ARENA_REVEAL_POLL_TIMEOUT_SEC
+        last_signature = ""
+        try:
+            while time.time() < deadline and not stop_event.is_set() and not self._is_shutdown():
+                session = self._get_session(session_id) if callable(self._get_session) else None
+                tab = getattr(session, "tab", None) if session is not None else None
+                if tab is None:
+                    return
+                # P0-6：翻牌轮询期间视为活跃，避免被空闲冻结
+                note_network_activity(session)
+                try:
+                    snapshot = decode_js_json(tab.run_js(_ARENA_STORE_SNAPSHOT_JSON_JS))
+                except Exception as e:
+                    if not is_page_refresh_error(e):
+                        logger.debug_throttled(
+                            f"global_net.arena_reveal_snapshot.{session_id}",
+                            f"[GlobalNet] 读取 Arena 翻牌快照失败（忽略）: {e}",
+                            interval_sec=10.0,
+                        )
+                    time.sleep(self.ARENA_REVEAL_POLL_INTERVAL_SEC)
+                    continue
+
+                if not isinstance(snapshot, dict):
+                    time.sleep(self.ARENA_REVEAL_POLL_INTERVAL_SEC)
+                    continue
+
+                is_direct = bool(
+                    snapshot.get("is_direct")
+                    or str(snapshot.get("mode") or "").strip().lower() == "direct"
+                    or is_explicit_arena_direct_url(snapshot.get("url"))
+                )
+                if is_direct:
+                    return
+
+                snapshot["session_id"] = session_id
+                model_a = str(snapshot.get("model_a") or "").strip()
+                model_b = str(snapshot.get("model_b") or "").strip()
+                response_a = str(snapshot.get("response_a") or "")
+                response_b = str(snapshot.get("response_b") or "")
+                message_id_a = str(snapshot.get("message_id_a") or "").strip()
+                message_id_b = str(snapshot.get("message_id_b") or "").strip()
+
+                if not (model_a and model_b and message_id_a and message_id_b and message_id_a != message_id_b):
+                    time.sleep(self.ARENA_REVEAL_POLL_INTERVAL_SEC)
+                    continue
+
+                signature = (
+                    f"{snapshot.get('conversation_id')}|{message_id_a}|"
+                    f"{message_id_b}|{model_a}|{model_b}"
+                )
+                if signature != last_signature:
+                    last_signature = signature
+                    log_signature = f"{session_id}|{signature}"
+                    with self._arena_reveal_lock:
+                        should_log = log_signature not in self._arena_reveal_logged_signatures
+                        if should_log:
+                            self._arena_reveal_logged_signatures.add(log_signature)
+                            if len(self._arena_reveal_logged_signatures) > 500:
+                                self._arena_reveal_logged_signatures.clear()
+                    if should_log:
+                        logger.debug(
+                            "[GlobalNet] Arena 翻牌快照更新: "
+                            f"reason={reason}, model_a={model_a}, model_b={model_b}, "
+                            f"a={len(response_a)}, b={len(response_b)}"
+                        )
+
+                if response_a and response_b:
+                    emit_arena_snapshot_event(snapshot)
+                    return
+
+                time.sleep(self.ARENA_REVEAL_POLL_INTERVAL_SEC)
+        finally:
+            with self._arena_reveal_lock:
+                current = self._arena_reveal_pollers.get(session_id)
+                if current is threading.current_thread():
+                    self._arena_reveal_pollers.pop(session_id, None)
+
+    def __call__(
+        self,
+        session: TabSession,
+        response: Any,
+        event: Dict[str, Any],
+        stop_event: threading.Event,
+    ) -> None:
+        """作为全局 response listener 的回调入口。"""
+        self._dispatch_result_bridge_async(session, response, event, stop_event)
+        self._start_arena_reveal_poll(session, event, stop_event, "network-event")
+
+
+def register_arena_tab_listener(manager: Any) -> Optional[Callable[[], None]]:
+    """向全局网络管理器挂载 Arena 翻牌与结果监听器。"""
+    if manager is None or not hasattr(manager, "register_response_listener"):
+        return None
+
+    get_session_fn = getattr(manager, "_get_session", None)
+    is_shutdown_fn = getattr(manager, "_is_shutdown", None)
+    listener = ArenaTabListener(get_session_fn=get_session_fn, is_shutdown_fn=is_shutdown_fn)
+
+    return manager.register_response_listener(
+        ArenaTabListener.is_arena_candidate,
+        listener,
+    )
